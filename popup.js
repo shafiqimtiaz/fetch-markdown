@@ -63,8 +63,11 @@ function setupTabs() {
 }
 
 /* ---- Options ---- */
+// Loads user-defined settings (custom selectors, YAML template) from
+// chrome.storage.local and merges them with the per-conversion checkbox
+// options. Returns a Promise because chrome.storage is async.
 function getOptions() {
-  return {
+  const checkboxOpts = {
     includeTitle: document.getElementById('optTitle').checked,
     includeMetadata: document.getElementById('optMetadata').checked,
     keepLinks: document.getElementById('optLinks').checked,
@@ -72,6 +75,17 @@ function getOptions() {
     codeBlocks: document.getElementById('optCodeBlocks').checked,
     smartExtract: document.getElementById('optSmartExtract').checked,
   };
+  return new Promise((resolve) => {
+    chrome.storage.local.get(['settings'], (r) => {
+      const s = r.settings || {};
+      resolve({
+        ...checkboxOpts,
+        extraInclude: s.extraInclude || '',
+        extraExclude: s.extraExclude || '',
+        yamlTemplate: s.yamlTemplate || '',
+      });
+    });
+  });
 }
 
 /* ---- Convert ---- */
@@ -86,7 +100,7 @@ async function doConvert(mode) {
 
   const isPage = mode === 'page';
   const btn = isPage ? document.getElementById('convertBtn') : document.getElementById('convertSelBtn');
-  const opts = isPage ? getOptions() : { keepLinks: true, keepImages: true, codeBlocks: true };
+  const opts = isPage ? await getOptions() : { keepLinks: true, keepImages: true, codeBlocks: true };
 
   btn.disabled = true;
   btn.innerHTML = '<div class="spinner"></div> Converting...';

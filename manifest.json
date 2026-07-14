@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Markdown This Page",
-  "version": "3.0.0",
-  "description": "Convert any web page to clean Markdown. Auto-detects site type (blog, docs, news, wiki, GitHub, etc.) and adapts extraction for the best output.",
+  "version": "4.0.0",
+  "description": "Convert any web page to clean Markdown. Confidence-scored site detection (25+ types), Readability-style fallback extraction, code-aware post-processing, and lazy-load image unwrapping for production-grade output.",
   "permissions": [
     "activeTab",
     "scripting",
