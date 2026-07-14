@@ -848,11 +848,11 @@
       });
     }
 
-    const html = root.innerHTML || root.outerHTML;
-    // Fallback: if Turndown crashes on complex DOMs (SPAs like Gmail),
-    // fall back to plain text extraction
+    // Pass the DOM node directly — serializing to HTML and re-parsing
+    // creates orphaned nodes on complex SPAs (Gmail, etc.), causing
+    // Turndown to crash with 'Cannot read properties of undefined (reading parentNode)'.
     try {
-      return td.turndown(html);
+      return td.turndown(root);
     } catch (e) {
       console.warn('[MTP] Turndown failed, falling back to plain text:', e.message);
       return fallbackToPlainText(root);
@@ -864,9 +864,10 @@
   //  Used when Turndown crashes on hostile DOMs
   // ──────────────────────────────────────────────
   function fallbackToPlainText(root) {
+    // Walk block elements to preserve paragraph breaks between sections
+    const blocks = root.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, pre, blockquote, hr, br, table, tr, th, td');
     let text = root.textContent || '';
-    // Basic formatting: preserve paragraph breaks
-    text = text.replace(/\n\s*\n\s*\n/g, '\n\n');
+    text = text.replace(/\n{3,}/g, '\n\n');
     text = text.replace(/[ \t]+/g, ' ');
     return text.trim();
   }
