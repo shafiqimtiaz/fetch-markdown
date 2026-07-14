@@ -1,11 +1,11 @@
-# Markdown This Page
+# Markify
 
 > Turn any web page into clean Markdown with one click.
 
 [![Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](https://github.com/shafiqimtiaz/markify)
 [![License](https://img.shields.io/badge/License-MIT-green)]()
 
-**Markdown This Page** (MTP) is a Chrome extension that converts any web page to clean, structured Markdown. It doesn't just blindly strip HTML — it detects what kind of page you're on (blog, docs, GitHub, Wikipedia, news, etc.) and adapts its extraction strategy for the best results.
+**Markify** is a Chrome extension that converts any web page to clean, structured Markdown. It doesn't just blindly strip HTML — it detects what kind of page you're on (blog, docs, GitHub, Wikipedia, news, etc.) and adapts its extraction strategy for the best results.
 
 ## Features
 
