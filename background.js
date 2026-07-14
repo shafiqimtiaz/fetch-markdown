@@ -28,7 +28,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (id === 'link-md') {
     const text = info.selectionText || info.linkUrl || '';
     const md = '[' + text + '](' + (info.linkUrl || '') + ')';
-    await copyAndFlash(md, tab.id);
+    await copyAndFlash(md, tab);
     return;
   }
 
@@ -36,7 +36,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (id === 'image-md') {
     const alt = info.selectionText || 'image';
     const md = '![' + alt + '](' + (info.srcUrl || '') + ')';
-    await copyAndFlash(md, tab.id);
+    await copyAndFlash(md, tab);
     return;
   }
 
@@ -44,8 +44,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (id === 'selection-convert') {
     try {
       const resp = await chrome.tabs.sendMessage(tab.id, { type: 'CONVERT_SELECTION' });
-      if (resp?.result) await copyAndFlash(resp.result, tab.id);
-    } catch (e) { flashBadge('✗ ERR', '#dc2626', tab.id); }
+      if (resp?.result) await copyAndFlash(resp.result, tab);
+    } catch (e) { flashBadge('✗', '#dc2626', tab.id); }
     return;
   }
 
@@ -57,11 +57,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         options: { includeTitle: true, includeMetadata: true, keepLinks: true, keepImages: true, codeBlocks: true, smartExtract: true }
       });
       if (resp?.result) {
-        await copyAndFlash(resp.result, tab.id);
+        await copyAndFlash(resp.result, tab);
       } else if (resp?.error) {
-        flashBadge('✗ ' + resp.error, '#dc2626', tab.id);
+        flashBadge('✗', '#dc2626', tab.id);
       }
-    } catch (e) { flashBadge('✗ ERR', '#dc2626', tab.id); }
+    } catch (e) { flashBadge('✗', '#dc2626', tab.id); }
     return;
   }
 });
@@ -77,17 +77,17 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
         type: 'CONVERT',
         options: { includeTitle: true, includeMetadata: true, keepLinks: true, keepImages: true, codeBlocks: true, smartExtract: true }
       });
-      if (resp?.result) await copyAndFlash(resp.result, tab.id);
-      else if (resp?.error) flashBadge('✗ ' + resp.error, '#dc2626', tab.id);
-    } catch (e) { flashBadge('✗ ERR', '#dc2626', tab.id); }
+      if (resp?.result) await copyAndFlash(resp.result, tab);
+      else if (resp?.error) flashBadge('✗', '#dc2626', tab.id);
+    } catch (e) { flashBadge('✗', '#dc2626', tab.id); }
     return;
   }
 
   if (command === 'convert-selection') {
     try {
       const resp = await chrome.tabs.sendMessage(tab.id, { type: 'CONVERT_SELECTION' });
-      if (resp?.result) await copyAndFlash(resp.result, tab.id);
-    } catch (e) { flashBadge('✗ ERR', '#dc2626', tab.id); }
+      if (resp?.result) await copyAndFlash(resp.result, tab);
+    } catch (e) { flashBadge('✗', '#dc2626', tab.id); }
   }
 });
 
@@ -104,12 +104,13 @@ async function ensureContentScript(tab) {
   } catch {}
 }
 
-async function copyAndFlash(text, tabId) {
-  // Use content script isolated world for clipboard (clipboardWrite permission applies)
+async function copyAndFlash(text, tab) {
+  const tabId = tab.id;
+
+  // Copy to clipboard via content script isolated world
   try {
     await chrome.tabs.sendMessage(tabId, { type: 'COPY_TO_CLIPBOARD', text });
   } catch {
-    // Fallback: inject into page as last resort
     try {
       await chrome.scripting.executeScript({
         target: { tabId },
@@ -118,10 +119,41 @@ async function copyAndFlash(text, tabId) {
       });
     } catch {}
   }
-  flashBadge('✓ MD', '#16a34a', tabId);
+
+  // Save to history
+  try {
+    const { history = [] } = await chrome.storage.local.get(['history']);
+    history.unshift({
+      title: tab.title || 'Untitled',
+      url: tab.url || '',
+      length: text.length,
+      content: text,
+      time: Date.now()
+    });
+    if (history.length > 50) history.length = 50;
+    await chrome.storage.local.set({ history });
+  } catch {}
+
+  // Green check badge covering the icon
+  chrome.action.setBadgeText({ text: '✓', tabId });
+  chrome.action.setBadgeBackgroundColor({ color: '#16a34a', tabId });
+  chrome.action.setBadgeTextColor({ color: '#ffffff', tabId });
+
+  // Toast notification
+  try {
+    await chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon128.png',
+      title: 'Markify',
+      message: 'Markdown copied to clipboard'
+    });
+  } catch {}
+
+  // Clear badge after 2s
+  setTimeout(() => chrome.action.setBadgeText({ text: '', tabId }), 2000);
 }
 
-async function flashBadge(text, color, tabId) {
+function flashBadge(text, color, tabId) {
   chrome.action.setBadgeText({ text, tabId });
   chrome.action.setBadgeBackgroundColor({ color, tabId });
   chrome.action.setBadgeTextColor({ color: '#ffffff', tabId });
