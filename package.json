@@ -1,0 +1,20 @@
+{
+  "name": "markify",
+  "version": "4.0.0",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/build.js",
+    "typecheck": "echo 'No typecheck step (plain JS project)'",
+    "zip": "cd dist && zip -r ../markify-v${npm_package_version}.zip .",
+    "release": "release-it",
+    "release:dry": "release-it --dry-run"
+  },
+  "devDependencies": {
+    "@release-it/conventional-changelog": "^11.0.1",
+    "release-it": "^20.2.0"
+  }
+}

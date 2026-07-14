@@ -1,0 +1,28 @@
+{
+  "$schema": "https://unpkg.com/release-it@20/schema/release-it.json",
+  "npm": {
+    "publish": false
+  },
+  "git": {
+    "commitMessage": "chore: release v${version}",
+    "tagName": "v${version}",
+    "tag": true,
+    "push": true,
+    "requireCleanWorkingDir": true
+  },
+  "github": {
+    "release": true,
+    "releaseName": "Markdown This Page v${version}",
+    "assets": ["markify-v${version}.zip"]
+  },
+  "plugins": {
+    "@release-it/conventional-changelog": {
+      "preset": "conventionalcommits",
+      "infile": "CHANGELOG.md"
+    }
+  },
+  "hooks": {
+    "after:bump": "node scripts/update-manifest.js && node scripts/build.js && npm run zip",
+    "after:release": "rm -f markify-v*.zip && rm -rf dist"
+  }
+}

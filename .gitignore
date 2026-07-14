@@ -1,0 +1,26 @@
+# dependencies
+node_modules
+
+# output
+dist
+*.zip
+*.tgz
+
+# logs
+*.log
+report.*.*.*.*.json
+
+# dotenv
+.env
+.env.local
+
+# caches
+.eslintcache
+.cache
+
+# IDE
+.idea
+*.iml
+
+# macOS
+.DS_Store
