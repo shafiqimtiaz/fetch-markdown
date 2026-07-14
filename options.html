@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown This Page — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <h1>MTP</h1>
+  <p class="subtitle">Settings &amp; Configuration</p>
+
+  <div class="card">
+    <h2>Conversion Defaults</h2>
+    <label class="field"><input type="checkbox" id="defTitle" checked> Include title heading</label>
+    <label class="field"><input type="checkbox" id="defMetadata" checked> Include YAML front matter</label>
+    <label class="field"><input type="checkbox" id="defLinks" checked> Keep hyperlinks</label>
+    <label class="field"><input type="checkbox" id="defImages" checked> Keep images</label>
+    <label class="field"><input type="checkbox" id="defCodeBlocks" checked> Use fenced code blocks</label>
+    <label class="field"><input type="checkbox" id="defSmartExtract" checked> Smart content extraction</label>
+  </div>
+
+  <div class="card">
+    <h2>Custom CSS Selectors</h2>
+    <p>Override what gets included or excluded. One selector per line.</p>
+    <div class="form-group">
+      <label>Extra include selectors</label>
+      <textarea id="extraInclude" placeholder=".my-article&#10;#custom-content" rows="3"></textarea>
+      <div class="hint">These elements will be prioritized as main content</div>
+    </div>
+    <div class="form-group">
+      <label>Extra exclude selectors</label>
+      <textarea id="extraExclude" placeholder=".sponsored&#10;#paywall" rows="3"></textarea>
+      <div class="hint">These elements will be stripped before conversion</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>YAML Front Matter Template</h2>
+    <p>Placeholders: {title}, {url}, {date}, {author}, {description}, {site_type}</p>
+    <div class="form-group">
+      <textarea id="yamlTemplate" rows="7">---
+title: "{title}"
+source: "{url}"
+date: "{date}"
+site_type: "{site_type}"
+author: "{author}"
+description: "{description}"
+---</textarea>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Detected Site Types</h2>
+    <p>The extension auto-detects the type of website and applies tailored extraction:</p>
+    <div class="site-types">
+      <div class="site-type-chip">GitHub</div>
+      <div class="site-type-chip">GitHub Issue/PR</div>
+      <div class="site-type-chip">GitHub Wiki</div>
+      <div class="site-type-chip">Stack Overflow</div>
+      <div class="site-type-chip">Reddit</div>
+      <div class="site-type-chip">Twitter / X</div>
+      <div class="site-type-chip">Wikipedia</div>
+      <div class="site-type-chip">Blog</div>
+      <div class="site-type-chip">News</div>
+      <div class="site-type-chip">Documentation</div>
+      <div class="site-type-chip">Product Page</div>
+      <div class="site-type-chip">Academic Paper</div>
+      <div class="site-type-chip">Forum</div>
+      <div class="site-type-chip">Generic</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Keyboard Shortcuts</h2>
+    <table class="shortcuts-table">
+      <tr><th>Action</th><th>Shortcut</th></tr>
+      <tr><td>Convert page to Markdown</td><td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>M</kbd></td></tr>
+      <tr><td>Convert selection to Markdown</td><td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd></td></tr>
+    </table>
+    <p class="hint-text">Customize at <code>chrome://extensions/shortcuts</code></p>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-primary" id="saveBtn">Save Settings</button>
+    <button class="btn btn-danger" id="resetBtn">Reset Defaults</button>
+    <span class="saved" id="savedMsg">Saved!</span>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
