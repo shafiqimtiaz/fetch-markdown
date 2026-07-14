@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icons/icon128.png" width="80" alt="Markify icon">
+</p>
+
 # Markify
 
 > Turn any web page into clean Markdown with one click.
