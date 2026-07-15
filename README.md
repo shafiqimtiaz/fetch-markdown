@@ -17,7 +17,7 @@
 The detection, formatting, and conversion algorithm has been rewritten to production quality:
 
 - **Confidence-scored site detection** — Instead of a single hard-coded if/else chain, the new detector builds a detection context once and scores 25+ candidate site types in parallel. The highest-scoring candidate wins, which means multiple weak signals can combine to correctly identify sites we've never seen before.
-- **25+ site types** — GitHub (repo / issue / wiki), GitLab, Bitbucket, Stack Overflow, Reddit, Twitter/X, LinkedIn, YouTube, Wikipedia, Notion, Confluence, Discourse, Hacker News, blogs, news, docs, product, academic, forums, webmail, ChatGPT/Claude, and generic.
+- **Broad site detection** — Identifies code repositories, Q&A forums, social media platforms, documentation hubs, wikis, news outlets, academic papers, webmail, AI chat interfaces, and general web content.
 - **Readability-style fallback** — When no site-specific extractor matches, a content-density scorer walks the DOM, scores each candidate by text length, paragraph count, comma/period density, and link density (penalty), then picks the densest content node. This is the same approach Mozilla Readability uses.
 - **Code-aware post-processing** — All punctuation cleanup, whitespace normalization, and heading hierarchy fixes are applied **only to non-code segments**. Fenced code blocks and inline code spans are split out, left untouched, then reassembled. Your code samples come out exactly as they were on the page.
 - **Heading hierarchy normalization** — If a document jumps from `<h1>` to `<h3>` (skipping `<h2>`), the levels are remapped to a contiguous 1..N hierarchy so the Markdown structure makes sense.
@@ -83,15 +83,7 @@ Open extension **Settings** from the popup gear icon to configure:
 
 ## Detected site types
 
-The extension identifies these site categories and selects the most appropriate extraction strategy for each:
-
-```
-GitHub · GitHub Issue/PR · GitHub Wiki · GitLab · Bitbucket
-Stack Overflow · Reddit · Twitter/X · LinkedIn · YouTube
-Wikipedia · Notion · Confluence · Discourse · Hacker News
-Blog · News · Documentation · Product Page · Academic Paper
-Forum · Webmail · ChatGPT/Claude · Generic
-```
+The extension identifies the page category using a confidence-scored detection system and selects the most appropriate extraction strategy, covering code hosting, Q&A, social media, wikis, documentation, news, academic content, forums, webmail, AI chat interfaces, and general web pages.
 
 ## How it works
 
