@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Markify",
+  "name": "Fetch Markdown",
   "version": "4.0.0",
   "description": "Convert any web page to clean Markdown. Smart site detection, fallback extraction, and code-aware output for production use.",
   "permissions": [
@@ -25,7 +25,7 @@
       "48": "icons/icon48.png",
       "128": "icons/icon128.png"
     },
-    "default_title": "Markify"
+    "default_title": "Fetch Markdown"
   },
   "icons": {
     "16": "icons/icon16.png",

@@ -1,16 +1,16 @@
 <p align="center">
-  <img src="icons/icon128.png" width="80" alt="Markify icon">
+  <img src="icons/icon128.png" width="80" alt="Fetch Markdown icon">
 </p>
 
-# Markify
+# Fetch Markdown
 
 > Turn any web page into clean Markdown with one click.
 
-[![Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](https://github.com/shafiqimtiaz/markify)
+[![Chrome](https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white)](https://github.com/shafiqimtiaz/fetch-markdown)
 [![Version](https://img.shields.io/badge/Version-4.0-blue)]()
 [![License](https://img.shields.io/badge/License-MIT-green)]()
 
-**Markify** is a Chrome extension that converts any web page to clean, structured Markdown. It doesn't just blindly strip HTML — it detects what kind of page you're on (blog, docs, GitHub, Wikipedia, news, etc.) and adapts its extraction strategy for the best results.
+**Fetch Markdown** is a Chrome extension that converts any web page to clean, structured Markdown. It doesn't just blindly strip HTML — it detects what kind of page you're on (blog, docs, GitHub, Wikipedia, news, etc.) and adapts its extraction strategy for the best results.
 
 ## What's new in v4.0 (production-grade)
 
@@ -21,7 +21,7 @@ The detection, formatting, and conversion algorithm has been rewritten to produc
 - **Readability-style fallback** — When no site-specific extractor matches, a content-density scorer walks the DOM, scores each candidate by text length, paragraph count, comma/period density, and link density (penalty), then picks the densest content node. This is the same approach Mozilla Readability uses.
 - **Code-aware post-processing** — All punctuation cleanup, whitespace normalization, and heading hierarchy fixes are applied **only to non-code segments**. Fenced code blocks and inline code spans are split out, left untouched, then reassembled. Your code samples come out exactly as they were on the page.
 - **Heading hierarchy normalization** — If a document jumps from `<h1>` to `<h3>` (skipping `<h2>`), the levels are remapped to a contiguous 1..N hierarchy so the Markdown structure makes sense.
-- **Lazy-load image unwrapping** — Many modern sites hide real image URLs behind `data-src`, `data-original`, `data-lazy-src`, or `srcset` attributes (with a tiny placeholder in `src`). Markify unwraps these so the real image URL ends up in the Markdown.
+- **Lazy-load image unwrapping** — Many modern sites hide real image URLs behind `data-src`, `data-original`, `data-lazy-src`, or `srcset` attributes (with a tiny placeholder in `src`). Fetch Markdown unwraps these so the real image URL ends up in the Markdown.
 - **Tracking-param stripping** — Common tracking parameters (`utm_source`, `utm_medium`, `utm_campaign`, `fbclid`, `gclid`, `mc_eid`, etc.) are stripped from link URLs automatically.
 - **Extended inline-element rules** — `<kbd>` → inline code, `<mark>` → bold, `<sub>`/`<sup>` → HTML tags, `<abbr title="...">` → `ABBR (expansion)`, `<details>`/`<summary>` → blockquote, `<figure>`/`<figcaption>` → image with italic caption.
 - **Proper YAML escaping** — Front-matter values are now escaped per the YAML 1.2 spec (backslashes and double quotes are escaped, booleans/null are quoted, numbers are bare). The user-defined YAML template from Settings is finally wired through.
@@ -43,7 +43,7 @@ The detection, formatting, and conversion algorithm has been rewritten to produc
 
 1. Open `chrome://extensions` in Chrome.
 2. Enable **Developer mode** (top right).
-3. Click **Load unpacked** and select the `markify` directory.
+3. Click **Load unpacked** and select the `fetch-markdown` directory.
 4. Pin the extension for quick access.
 
 > **Note:** This is an unpacked extension. Packaged distribution via the Chrome Web Store is planned.
@@ -118,7 +118,7 @@ Forum · Webmail · ChatGPT/Claude · Generic
 ## Project structure
 
 ```
-markify/
+fetch-markdown/
 ├── manifest.json           # Extension manifest (MV3, v4.0)
 ├── background.js           # Service worker — context menus, shortcuts
 ├── content.js              # Content script — detection, extraction, conversion (v4.0)

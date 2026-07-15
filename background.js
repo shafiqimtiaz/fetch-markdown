@@ -1,5 +1,5 @@
 /**
- * Background service worker — Markify v3.0
+ * Background service worker — Fetch Markdown v3.0
  * Markdown-only context menus + keyboard shortcuts
  */
 
@@ -144,7 +144,7 @@ async function copyAndFlash(text, tab) {
     await chrome.notifications.create({
       type: 'basic',
       iconUrl: 'icons/icon128.png',
-      title: 'Markify',
+      title: 'Fetch Markdown',
       message: 'Markdown copied to clipboard'
     });
   } catch {}

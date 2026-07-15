@@ -1,5 +1,5 @@
 {
-  "name": "markify",
+  "name": "fetch-markdown",
   "version": "4.0.0",
   "type": "module",
   "private": true,
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "node scripts/build.js",
     "typecheck": "echo 'No typecheck step (plain JS project)'",
-    "zip": "cd dist && zip -r ../markify-v${npm_package_version}.zip .",
+    "zip": "cd dist && zip -r ../fetch-markdown-v${npm_package_version}.zip .",
     "release": "release-it",
     "release:dry": "release-it --dry-run"
   },
