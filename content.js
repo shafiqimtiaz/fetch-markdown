@@ -353,8 +353,30 @@
     }
     if (!contentRoot) contentRoot = document.body;
 
-    // 2. Clone and clean.
-    const clone = contentRoot.cloneNode(true);
+    // 2. Flatten same-origin iframes in the LIVE root (their documents are
+    //    only reachable while attached), clone with shadow-DOM piercing,
+    //    then restore the live page untouched — all synchronously, so the
+    //    user never sees the page mutate.
+    const iframeSwaps = flattenIframesInRoot(contentRoot);
+    let clone;
+    try {
+      clone = cloneWithShadowPiercing(contentRoot);
+    } catch (e) {
+      log('shadow-piercing clone failed, falling back to plain clone:', e);
+      clone = contentRoot.cloneNode(true);
+    } finally {
+      restoreIframes(iframeSwaps);
+    }
+
+    // 2b. Preserve math (KaTeX/MathJax/MathML → $...$) and mermaid diagram
+    //     source BEFORE cleaning — otherwise <svg> stripping destroys them.
+    try {
+      preserveRichMedia(clone);
+    } catch (e) {
+      log('preserveRichMedia error (non-fatal):', e);
+    }
+
+    // 3. Clean the clone.
     cleanDOM(clone, siteType, opts, userExclude);
 
     // 3. Apply site-type-specific DOM transformations.
@@ -871,9 +893,21 @@
     // Try article-like selectors first (cheap path).
     const quick = safeQuery('article, main, [role="main"]');
     if (quick && quick.textContent.trim().length > 200) return quick;
-    // Readability-style density scorer.
+    // Readability-style density scorer (two tiers — strict, then relaxed).
     const best = findMainContentByDensity(document);
-    if (best) return best;
+    if (best) {
+      // If the winner is thin but the page has substantial shadow-DOM
+      // content (modern web components), prefer the whole body so the
+      // shadow-piercing clone can capture it.
+      const shadowText = totalShadowRootText(document.body);
+      if (shadowText.length > 300 && shadowText.length > (best.textContent || '').length * 2) {
+        return document.body;
+      }
+      return best;
+    }
+    // JS-rendered news/blogs often hide the full article in JSON-LD.
+    const jsonld = extractJSONLD();
+    if (jsonld) return jsonld;
     return document.body || document.documentElement;
   }
 
@@ -886,49 +920,61 @@
   //   - link density (penalty)
   //   - presence of commas / periods (real prose)
   // Returns the highest-scoring element, or null.
+  // Two tiers: a strict pass first (long real prose), then a relaxed pass
+  // (short pages, SPAs, landing pages) so ANY genuine text block beats a
+  // whole-body dump full of nav/footer noise.
   function findMainContentByDensity(doc) {
     const candidates = doc.querySelectorAll(
       'article, main, section, div, [role="main"], [role="article"]'
     );
-    let best = null;
-    let bestScore = 0;
+    const tiers = [
+      { minText: 500, minParas: 2, minPeriods: 5, maxLinkDensity: 0.5 },
+      { minText: 150, minParas: 1, minPeriods: 2, maxLinkDensity: 0.6 },
+    ];
 
-    candidates.forEach((el) => {
-      // Skip tiny nodes / nodes with too many children (likely layout wrappers).
-      const text = el.textContent || '';
-      if (text.length < 500) return;
+    for (const tier of tiers) {
+      let best = null;
+      let bestScore = 0;
 
-      const paragraphs = el.querySelectorAll('p').length;
-      if (paragraphs < 2) return; // require at least 2 paragraphs
+      candidates.forEach((el) => {
+        // Skip tiny nodes / nodes with too many children (likely layout wrappers).
+        const text = el.textContent || '';
+        if (text.length < tier.minText) return;
 
-      const linkText = Array.from(el.querySelectorAll('a'))
-        .reduce((sum, a) => sum + (a.textContent || '').length, 0);
-      const linkDensity = text.length > 0 ? linkText / text.length : 0;
-      if (linkDensity > 0.5) return; // mostly links → nav / footer
+        const paragraphs = el.querySelectorAll('p').length;
+        if (paragraphs < tier.minParas) return; // require at least 1 paragraph
 
-      // Real prose has commas and periods.
-      const commaCount = (text.match(/[,;]/g) || []).length;
-      const periodCount = (text.match(/[.!?]/g) || []).length;
-      if (periodCount < 5) return;
+        const linkText = Array.from(el.querySelectorAll('a'))
+          .reduce((sum, a) => sum + (a.textContent || '').length, 0);
+        const linkDensity = text.length > 0 ? linkText / text.length : 0;
+        if (linkDensity > tier.maxLinkDensity) return; // mostly links → nav / footer
 
-      let score = 0;
-      score += text.length / 100;             // 1 pt per 100 chars
-      score += paragraphs * 5;                // 5 pts per paragraph
-      score += commaCount * 0.5;              // 0.5 pt per comma/semicolon
-      score += periodCount * 1;               // 1 pt per period
-      score -= linkDensity * 200;             // heavy penalty for link-heavy nodes
-      // Slight bonus for semantic tags.
-      if (el.tagName === 'ARTICLE') score += 50;
-      if (el.tagName === 'MAIN') score += 30;
-      if (el.getAttribute('role') === 'main') score += 30;
+        // Real prose has commas and periods.
+        const commaCount = (text.match(/[,;]/g) || []).length;
+        const periodCount = (text.match(/[.!?]/g) || []).length;
+        if (periodCount < tier.minPeriods) return;
 
-      if (score > bestScore) {
-        bestScore = score;
-        best = el;
-      }
-    });
+        let score = 0;
+        score += text.length / 100;             // 1 pt per 100 chars
+        score += paragraphs * 5;                // 5 pts per paragraph
+        score += commaCount * 0.5;              // 0.5 pt per comma/semicolon
+        score += periodCount * 1;               // 1 pt per period
+        score -= linkDensity * 200;             // heavy penalty for link-heavy nodes
+        // Slight bonus for semantic tags.
+        if (el.tagName === 'ARTICLE') score += 50;
+        if (el.tagName === 'MAIN') score += 30;
+        if (el.getAttribute('role') === 'main') score += 30;
 
-    return best;
+        if (score > bestScore) {
+          bestScore = score;
+          best = el;
+        }
+      });
+
+      if (best) return best;
+    }
+
+    return null;
   }
 
   // ──────────────────────────────────────────────
@@ -942,7 +988,9 @@
     //   4. Hidden elements (display:none, visibility:hidden, aria-hidden)
     const NOISE = [
       // Non-content tags
-      'script','style','noscript','iframe','object','embed','svg','canvas',
+      // (iframe is NOT stripped — same-origin frames are flattened, cross-
+      //  origin frames become links; leftovers are handled by a Turndown rule)
+      'script','style','noscript','object','embed','svg','canvas',
       // ARIA landmarks
       '[role="navigation"]','nav','[role="banner"]','header[role="banner"]',
       '[role="contentinfo"]','footer','[role="complementary"]','aside',
@@ -1249,6 +1297,285 @@
   }
 
   // ──────────────────────────────────────────────
+  //  DEEP-DOM & RICH-MEDIA HANDLING
+  //  Makes "any website" conversion possible:
+  //   - shadow DOM piercing (web components: YouTube, Salesforce, …)
+  //   - same-origin iframe flattening; cross-origin iframe → link
+  //   - math preservation (KaTeX / MathJax / MathML → $...$ LaTeX)
+  //   - mermaid diagram source → fenced code block
+  //   - JSON-LD articleBody fallback (JS-rendered news/blogs)
+  // ──────────────────────────────────────────────
+
+  // Deep clone that flattens open shadow roots, distributing light-DOM
+  // children into <slot> positions (default + named, at any depth).
+  // Elements with an open shadowRoot render their shadow tree; un-slotted
+  // light children are dropped, exactly like the browser does.
+  // `slotMap` is non-null while cloning a shadow tree: any <slot>
+  // encountered is replaced with its assigned light-DOM nodes (or its
+  // fallback content when nothing is assigned).
+  function cloneWithShadowPiercing(node, slotMap) {
+    if (!node || node.nodeType !== 1) return node ? node.cloneNode(false) : node;
+    if (slotMap && node.tagName === 'SLOT') {
+      const kids = slotMap.get(node) || [];
+      const frag = node.ownerDocument.createDocumentFragment();
+      if (kids.length === 0) {
+        // Fallback content (rendered when nothing is assigned).
+        Array.from(node.childNodes).forEach(fc => frag.appendChild(cloneWithShadowPiercing(fc, slotMap)));
+      } else {
+        kids.forEach(k => frag.appendChild(cloneWithShadowPiercing(k, slotMap)));
+      }
+      return frag;
+    }
+    const clone = node.cloneNode(false);
+    const sr = node.shadowRoot;
+    if (!sr) {
+      Array.from(node.childNodes).forEach(child => clone.appendChild(cloneWithShadowPiercing(child, slotMap)));
+      return clone;
+    }
+    // Shadow root present — clone the shadow tree, replacing slots with
+    // their assigned light-DOM children (or the slot's fallback content).
+    const slots = [];
+    const lightKids = Array.from(node.childNodes);
+    const assigned = new Map(); // slot element → light nodes
+
+    const collect = (root) => {
+      Array.from(root.children).forEach(el => {
+        if (el.tagName === 'SLOT') slots.push(el);
+        else collect(el);
+      });
+    };
+    collect(sr);
+
+    slots.forEach(slot => {
+      const name = slot.getAttribute('name') || '';
+      const matched = name
+        ? lightKids.filter(k => k.nodeType === 1 && k.getAttribute('slot') === name)
+        : lightKids.filter(k => k.nodeType !== 1 || !k.getAttribute('slot'));
+      assigned.set(slot, matched);
+    });
+
+    Array.from(sr.childNodes).forEach(child => clone.appendChild(cloneWithShadowPiercing(child, assigned)));
+    return clone;
+  }
+
+  // Swap live same-origin iframes for a wrapper holding their (shadow-
+  // pierced) content; cross-origin iframes become links. Returns the list
+  // of swaps so the caller can restore the live page untouched.
+  function flattenIframesInRoot(root) {
+    const swaps = [];
+    try {
+      root.querySelectorAll('iframe').forEach(iframe => {
+        let replacement = null;
+        try {
+          const doc = iframe.contentDocument;
+          const body = doc && (doc.body || doc.documentElement);
+          if (body && (body.textContent || '').trim().length > 0) {
+            const wrapper = document.createElement('div');
+            wrapper.appendChild(cloneWithShadowPiercing(body));
+            replacement = wrapper;
+          }
+        } catch (_) {
+          // Cross-origin iframe — access throws; fall through to link.
+        }
+        if (!replacement) {
+          const src = iframe.getAttribute('src') || '';
+          if (src && !src.startsWith('blob:') && !src.startsWith('data:') && !src.startsWith('javascript:')) {
+            const a = document.createElement('a');
+            try { a.href = src; } catch (_) {}
+            let host = '';
+            try { host = new URL(src, location.href).hostname; } catch (_) {}
+            a.textContent = iframe.getAttribute('title') ||
+              (host ? 'Embedded content: ' + host : 'Embedded content');
+            replacement = a;
+          }
+        }
+        if (replacement) swaps.push({ iframe, replacement });
+      });
+      swaps.forEach(({ iframe, replacement }) => { try { iframe.replaceWith(replacement); } catch (_) {} });
+    } catch (e) {
+      log('flattenIframesInRoot error (non-fatal):', e);
+    }
+    return swaps;
+  }
+
+  function restoreIframes(swaps) {
+    if (!swaps) return;
+    for (let i = swaps.length - 1; i >= 0; i--) {
+      const { iframe, replacement } = swaps[i];
+      try { replacement.replaceWith(iframe); } catch (_) {}
+    }
+  }
+
+  // Convert KaTeX / MathJax / MathML <math> elements and mermaid diagrams
+  // into content that survives cleaning: $...$ math spans and mermaid code
+  // fences. MUST run before cleanDOM (which strips <svg>).
+  function preserveRichMedia(root) {
+    try {
+      root.querySelectorAll('math').forEach(m => {
+        const tex = mathToLatex(m);
+        if (!tex) return;
+        const span = document.createElement('span');
+        span.setAttribute('data-md-math', 'true');
+        if (m.getAttribute('display') === 'true' || m.getAttribute('display') === 'block' ||
+            m.closest('.katex-display, .mwe-math-display, .MathJax_Display')) {
+          span.setAttribute('data-md-display', 'true');
+        }
+        span.textContent = tex;
+        const katexWrap = m.closest('.katex');
+        try { (katexWrap || m).replaceWith(span); } catch (_) {}
+      });
+
+      // Mermaid: if the source text is still present, keep it as a fenced
+      // code block. Processed diagrams (svg only) have no recoverable
+      // source — outputting nothing is more honest than inventing content.
+      root.querySelectorAll('.mermaid, [data-mermaid]').forEach(el => {
+        const processed = el.hasAttribute('data-processed') || !!el.querySelector('svg');
+        if (processed) return;
+        const src = (el.textContent || '').trim();
+        if (!src) return;
+        const pre = document.createElement('pre');
+        const code = document.createElement('code');
+        code.className = 'language-mermaid';
+        code.textContent = src;
+        pre.appendChild(code);
+        try { el.replaceWith(pre); } catch (_) {}
+      });
+    } catch (e) {
+      log('preserveRichMedia error (non-fatal):', e);
+    }
+  }
+
+  // Best available LaTeX for a <math> element:
+  // TeX annotation → alttext attribute → linearized MathML.
+  function mathToLatex(m) {
+    try {
+      const annotation = m.querySelector('annotation[encoding="application/x-tex"]');
+      if (annotation && annotation.textContent.trim()) return annotation.textContent.trim();
+      const alttext = m.getAttribute('alttext');
+      if (alttext) return alttext.trim();
+      return linearizeMathML(m);
+    } catch (_) { return ''; }
+  }
+
+  // Last-resort linearization of MathML into readable one-line text.
+  function linearizeMathML(m) {
+    const out = [];
+    const walk = (node) => {
+      if (node.nodeType === 3) { out.push(node.textContent); return; }
+      if (node.nodeType !== 1) return;
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'annotation' || tag === 'annotation-xml') return;
+      if (tag === 'semantics') { Array.from(node.childNodes).forEach(walk); return; }
+      if (tag === 'mfrac') {
+        const kids = node.children;
+        out.push('('); if (kids[0]) walk(kids[0]); out.push(')/('); if (kids[1]) walk(kids[1]); out.push(')');
+        return;
+      }
+      if (tag === 'msubsup') {
+        const kids = node.children;
+        if (kids[0]) walk(kids[0]);
+        if (kids[1]) { out.push('_'); walk(kids[1]); }
+        out.push('^');
+        if (kids[2]) walk(kids[2]);
+        return;
+      }
+      if (tag === 'msup') {
+        const kids = node.children;
+        if (kids[0]) walk(kids[0]);
+        out.push('^');
+        if (kids[1]) walk(kids[1]);
+        return;
+      }
+      if (tag === 'msub') {
+        const kids = node.children;
+        if (kids[0]) walk(kids[0]);
+        out.push('_');
+        if (kids[1]) walk(kids[1]);
+        return;
+      }
+      if (tag === 'msqrt') {
+        out.push('sqrt('); Array.from(node.childNodes).forEach(walk); out.push(')');
+        return;
+      }
+      if (tag === 'mspace') { out.push(' '); return; }
+      Array.from(node.childNodes).forEach(walk);
+    };
+    walk(m);
+    return out.join('').replace(/\s+/g, ' ').trim();
+  }
+
+  // JSON-LD fallback: JS-rendered news/blogs keep the full article in
+  // <script type="application/ld+json"> articleBody.
+  function extractJSONLD() {
+    try {
+      const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+      for (const s of scripts) {
+        let data;
+        try { data = JSON.parse(s.textContent || ''); } catch (_) { continue; }
+        if (!data || typeof data !== 'object') continue;
+        const nodes = Array.isArray(data)
+          ? data
+          : (Array.isArray(data['@graph']) ? data['@graph'] : [data]);
+        for (const node of nodes) {
+          if (!node || typeof node !== 'object' || !node.articleBody) continue;
+          const types = Array.isArray(node['@type']) ? node['@type'] : [node['@type']];
+          if (!types.some(t => /article|blog|news|recipe|report/i.test(String(t)))) continue;
+          const container = document.createElement('div');
+          const headline = node.headline || node.name || node.title;
+          if (headline) {
+            const h = document.createElement('h1');
+            h.textContent = String(headline).trim();
+            container.appendChild(h);
+          }
+          const author = Array.isArray(node.author)
+            ? node.author.map(a => (a && a.name) || '').filter(Boolean).join(', ')
+            : (node.author && typeof node.author === 'object' ? node.author.name : node.author);
+          const date = node.datePublished || node.dateModified || '';
+          const meta = [author, date].map(String).filter(Boolean).join(' · ');
+          if (meta) {
+            const p = document.createElement('p');
+            p.textContent = meta;
+            container.appendChild(p);
+          }
+          const paras = (Array.isArray(node.articleBody) ? node.articleBody : [node.articleBody]).map(String);
+          paras.forEach(para => {
+            const text = para.replace(/<[^>]*>/g, '').trim();
+            if (!text) return;
+            text.split(/\n{2,}/).forEach(chunk => {
+              const c = chunk.trim();
+              if (!c) return;
+              const p = document.createElement('p');
+              p.textContent = c;
+              container.appendChild(p);
+            });
+          });
+          if (container.children.length > 0) return container;
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Total text across all open shadow roots reachable from `root` — used to
+  // decide whether shadow-DOM content outranks the density-scorer winner.
+  function totalShadowRootText(root) {
+    let total = '';
+    try {
+      const visit = (container) => {
+        Array.from(container.querySelectorAll('*')).forEach(el => {
+          const sr = el.shadowRoot;
+          if (sr) {
+            try { total += ' ' + (sr.textContent || ''); } catch (_) {}
+            visit(sr);
+          }
+        });
+      };
+      visit(root);
+    } catch (_) {}
+    return total.trim();
+  }
+
+  // ──────────────────────────────────────────────
   //  SITE-TYPE-SPECIFIC TRANSFORMS
   // ──────────────────────────────────────────────
   function applySiteTransforms(root, siteType) {
@@ -1383,6 +1710,29 @@
     if (typeof turndownPluginGfm !== 'undefined') {
       try { td.use(turndownPluginGfm.gfm); } catch (_) {}
     }
+
+    // Math spans ($...$) produced by preserveRichMedia.
+    td.addRule('mathSpan', {
+      filter: (node) => node.nodeType === 1 && typeof node.hasAttribute === 'function' &&
+              node.hasAttribute('data-md-math'),
+      replacement: (content, node) => {
+        const tex = (node.textContent || '').trim().replace(/\s+/g, ' ');
+        if (!tex) return '';
+        const display = node.getAttribute('data-md-display') === 'true';
+        return display ? '\n\n$$\n' + tex + '\n$$\n\n' : ' $' + tex + '$ ';
+      }
+    });
+
+    // Leftover iframes (nested / unflattenable) → link or nothing.
+    td.addRule('iframeEmbed', {
+      filter: 'iframe',
+      replacement: (content, node) => {
+        const src = node.getAttribute('src') || '';
+        if (!src || src.startsWith('blob:') || src.startsWith('data:')) return '';
+        const label = node.getAttribute('title') || 'Embedded content';
+        return '\n\n[' + label + '](' + src + ')\n\n';
+      }
+    });
 
     // --- Universal custom rules ---
     // Order matters: rules are evaluated in registration order, but each
