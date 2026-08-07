@@ -34,7 +34,11 @@
   // ──────────────────────────────────────────────
   //  CONSTANTS
   // ──────────────────────────────────────────────
-  const VERSION = '4.0';
+  // Version comes from the extension manifest (synced from package.json by
+  // scripts/build.js) so it can never drift from the packaged version.
+  const VERSION = (() => {
+    try { return (chrome.runtime.getManifest() || {}).version || '0.0.0'; } catch (_) { return '0.0.0'; }
+  })();
   const DEBUG = false; // flip to true to verbose-log to console
 
   // Track code-block fence markers so post-processing can skip them.
