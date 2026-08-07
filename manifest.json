@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fetch Markdown",
-  "version": "4.1.0",
+  "version": "4.2.0",
   "description": "Convert any web page to clean Markdown. Smart site detection, fallback extraction, and code-aware output for production use.",
   "permissions": [
     "activeTab",
@@ -39,12 +39,19 @@
   },
   "commands": {
     "convert-page": {
-      "suggested_key": { "default": "Ctrl+Shift+M", "mac": "Command+Shift+M" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+M",
+        "mac": "Command+Shift+M"
+      },
       "description": "Convert current page to Markdown"
     },
     "convert-selection": {
-      "suggested_key": { "default": "Ctrl+Shift+S", "mac": "Command+Shift+S" },
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
       "description": "Convert selected text to Markdown"
     }
-  }
+  },
+  "version_name": "4.2.0"
 }
