@@ -393,6 +393,8 @@
     // 4. Unwrap lazy-load image attributes (srcset, data-src, etc.)
     unwrapLazyImages(clone);
 
+    normalizeTables(clone);
+
     // 5. Convert to Markdown via Turndown.
     let markdown;
     try {
@@ -406,7 +408,7 @@
     let header = '';
     if (opts.includeMetadata) {
       header = buildFrontMatter(title, url, siteType, opts) + '\n\n';
-    } else if (opts.includeTitle && title) {
+    } else if (opts.includeTitle && title && !startsWithTitle(markdown, title)) {
       header = '# ' + title + '\n\n';
     }
 
@@ -414,6 +416,16 @@
     const output = postProcess(header + markdown, siteType, opts);
 
     return output;
+  }
+
+  // True when the content already opens with a heading matching the page
+  // title ("Markdown" vs "Markdown - Wikipedia"), so we don't print it twice.
+  function startsWithTitle(markdown, title) {
+    const m = (markdown || '').slice(0, 2000).match(/^#{1,6} (.+)$/m);
+    if (!m) return false;
+    const norm = (x) => x.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    const h = norm(m[1]), t = norm(title);
+    return h.length > 2 && (t.includes(h) || h.includes(t));
   }
 
   // ──────────────────────────────────────────────
@@ -470,23 +482,38 @@
   function extractGitHubIssue() {
     // Gather the issue body + all comments in timeline order.
     const container = document.createElement('div');
-    const titleEl = safeQuery('.js-issue-title, .gh-header-title .markdown-title, bdi.js-issue-title');
+    const titleEl = safeQuery('[data-testid="issue-title"]') ||
+      safeQuery('.js-issue-title, .gh-header-title .markdown-title, bdi.js-issue-title');
     if (titleEl) {
       const h = document.createElement('h1');
       h.textContent = titleEl.textContent.trim();
       container.appendChild(h);
     }
 
-    // The first comment is the issue body.
-    const bodies = document.querySelectorAll('.timeline-comment-body, .js-comment-body, .comment-body');
-    bodies.forEach((body, i) => {
+    // [{ author, body }] in timeline order; the first one is the issue body.
+    const posts = [];
+    const issueBody = safeQuery('[data-testid="issue-body-viewer"]');
+    if (issueBody) {
+      posts.push({ author: safeQuery('[data-testid="issue-body-header-author"]')?.textContent, body: issueBody });
+      document.querySelectorAll('[data-testid^="comment-viewer-outer-box"]').forEach(box => {
+        const body = box.querySelector('.markdown-body');
+        if (body) posts.push({ author: box.querySelector('[data-testid="avatar-link"]')?.textContent, body });
+      });
+    } else {
+      document.querySelectorAll('.timeline-comment, .review-comment').forEach(c => {
+        const body = c.querySelector('.comment-body');
+        if (body) posts.push({ author: c.querySelector('.author')?.textContent, body });
+      });
+    }
+    posts.forEach((post, i) => {
       const heading = document.createElement('h2');
-      heading.textContent = i === 0 ? 'Description' : ('Comment ' + i);
+      const who = (post.author || '').trim();
+      heading.textContent = (i === 0 ? 'Description' : 'Comment') + (who ? ' by ' + who : (i ? ' ' + i : ''));
       container.appendChild(heading);
-      container.appendChild(body.cloneNode(true));
+      container.appendChild(post.body.cloneNode(true));
     });
 
-    return container.children.length > 0 ? container : safeQuery('main');
+    return posts.length > 0 ? container : safeQuery('main');
   }
 
   // --- GitHub wiki ---
@@ -711,31 +738,42 @@
   // --- Hacker News ---
   function extractHackerNews() {
     const container = document.createElement('div');
-    const titleEl = safeQuery('.titleline > a, .athing .title, .title > a');
-    if (titleEl) {
+    const titleEl = safeQuery('.titleline > a') || safeQuery('.title > a');
+    if (titleEl && titleEl.textContent.trim()) {
       const h = document.createElement('h1');
       h.textContent = titleEl.textContent.trim();
       container.appendChild(h);
-      const url = titleEl.getAttribute('href');
-      if (url) {
+      if (titleEl.href && !titleEl.href.startsWith(location.origin + '/item')) {
         const p = document.createElement('p');
-        p.textContent = 'Link: ' + url;
+        const a = document.createElement('a');
+        a.href = titleEl.href;
+        a.textContent = titleEl.href;
+        p.appendChild(a);
         container.appendChild(p);
       }
     }
-    const postText = safeQuery('.toptext, .commtext');
-    if (postText) {
-      const h2 = document.createElement('h2');
-      h2.textContent = 'Post';
-      container.appendChild(h2);
-      container.appendChild(postText.cloneNode(true));
-    }
-    const comments = document.querySelectorAll('.comtr .commtext, .comment .commtext');
-    comments.forEach((c, i) => {
-      const h3 = document.createElement('h3');
-      h3.textContent = 'Comment ' + (i + 1);
-      container.appendChild(h3);
-      container.appendChild(c.cloneNode(true));
+    const postText = safeQuery('.toptext');
+    if (postText && postText.textContent.trim()) container.appendChild(postText.cloneNode(true));
+    // Each comment row carries its depth in .ind[indent]; nest blockquotes to match.
+    const rows = document.querySelectorAll('.comtr');
+    rows.forEach(row => {
+      const text = row.querySelector('.commtext');
+      if (!text) return;
+      const depth = parseInt(row.querySelector('.ind')?.getAttribute('indent') || '0', 10) || 0;
+      const user = row.querySelector('.hnuser')?.textContent.trim() || 'unknown';
+      let box = document.createElement('blockquote');
+      const p = document.createElement('p');
+      const b = document.createElement('strong');
+      b.textContent = user;
+      p.appendChild(b);
+      box.appendChild(p);
+      box.appendChild(text.cloneNode(true));
+      for (let d = 0; d < depth; d++) {
+        const outer = document.createElement('blockquote');
+        outer.appendChild(box);
+        box = outer;
+      }
+      container.appendChild(box);
     });
     return container.children.length > 0 ? container : null;
   }
@@ -821,25 +859,40 @@
   // --- Academic paper ---
   function extractAcademic() {
     // ArXiv abstract page
-    const abstract = safeQuery('#abs, .abstract, .ltx_abstract');
+    const abstract = safeQuery('blockquote.abstract') || safeQuery('.ltx_abstract') || safeQuery('.abstract');
     if (abstract) {
       const container = document.createElement('div');
-      const title = safeQuery('.title mathjax, .ltx_title, h1.title, h1.citation-title');
+      const textOf = (el) => {
+        const c = el.cloneNode(true);
+        c.querySelectorAll('.descriptor').forEach(d => d.remove());
+        return c.textContent.trim().replace(/\s+/g, ' ');
+      };
+      const title = safeQuery('h1.title') || safeQuery('.ltx_title') || safeQuery('h1.citation-title');
       if (title) {
         const h = document.createElement('h1');
-        h.textContent = title.textContent.trim();
+        h.textContent = textOf(title);
         container.appendChild(h);
       }
-      const authors = safeQuery('.authors, .author-list, .ltx_personname');
+      const authors = safeQuery('.authors') || safeQuery('.author-list');
       if (authors) {
-        const h2 = document.createElement('h2');
-        h2.textContent = 'Authors';
-        container.appendChild(h2);
         const p = document.createElement('p');
-        p.textContent = authors.textContent.trim().replace(/\s+/g, ' ');
+        p.textContent = textOf(authors);
         container.appendChild(p);
       }
-      container.appendChild(abstract.cloneNode(true));
+      const pdf = safeQuery('a.download-pdf');
+      if (pdf) {
+        const p = document.createElement('p');
+        p.appendChild(pdf.cloneNode(true));
+        container.appendChild(p);
+      }
+      const abs = abstract.cloneNode(true);
+      abs.querySelectorAll('.descriptor').forEach(d => d.remove());
+      const h2 = document.createElement('h2');
+      h2.textContent = 'Abstract';
+      container.appendChild(h2);
+      const div = document.createElement('div');
+      while (abs.firstChild) div.appendChild(abs.firstChild);
+      container.appendChild(div);
       return container;
     }
     // PubMed / DOI landing pages
@@ -994,14 +1047,15 @@
       // Non-content tags
       // (iframe is NOT stripped — same-origin frames are flattened, cross-
       //  origin frames become links; leftovers are handled by a Turndown rule)
-      'script','style','noscript','object','embed','svg','canvas',
+      'script','style','noscript','object','embed','svg','canvas','[data-fm-skip]',
       // ARIA landmarks
       '[role="navigation"]','nav','[role="banner"]','header[role="banner"]',
       '[role="contentinfo"]','footer','[role="complementary"]','aside',
       '[role="search"]','[role="alert"]','[role="dialog"]','[role="alertdialog"]',
       // Ads
       '.ad','.ads','.ad-banner','.ad-container','.advertisement','.ad-slot',
-      '[class*="ad-"]','[id*="ad-"]','[class*="advert"]','[id*="advert"]',
+      '[class^="ad-"]','[class*=" ad-"]','[id^="ad-"]','[class$="-ad"]','[class*="-ad "]',
+      '[class*="AdSlot"]','[data-testid*="ad-unit"]','[id^="google_ads"]','[class*="advert"]','[id*="advert"]',
       '[data-ad]','ins.adsbygoogle',
       // Cookie / paywall / consent
       '.cookie','.cookie-banner','.cookie-notice','.cookie-consent',
@@ -1024,7 +1078,7 @@
       // Breadcrumb / jump links
       '.breadcrumb','[class*="breadcrumb"]','[aria-label="breadcrumb"]',
       // Hidden elements (multiple hiding techniques)
-      '[aria-hidden="true"]','.hidden','.visually-hidden',
+      '[aria-hidden="true"]','.visually-hidden',
       '[style*="display: none"]','[style*="display:none"]',
       '[style*="visibility:hidden"]','[style*="visibility: hidden"]',
       '[hidden]',
@@ -1186,9 +1240,11 @@
         const els = Array.from(root.querySelectorAll(tag));
         els.forEach(el => {
           try {
-            const text = (el.textContent || '').trim();
-            if (!text.length && !el.querySelector('img,video,audio,code,pre,table,figure,iframe,svg')) {
-              el.remove();
+            const raw = el.textContent || '';
+            if (!raw.trim().length && !el.querySelector('img,video,audio,code,pre,table,figure,iframe,svg')) {
+              // A whitespace-only element (e.g. <span>&nbsp;</span>) is a word gap.
+              if (raw.length) el.replaceWith(document.createTextNode(' '));
+              else el.remove();
             }
           } catch (_) {}
         });
@@ -1330,6 +1386,7 @@
       }
       return frag;
     }
+    if (isDisplayNone(node)) return node.ownerDocument.createDocumentFragment();
     const clone = node.cloneNode(false);
     const sr = node.shadowRoot;
     if (!sr) {
@@ -1362,6 +1419,15 @@
     return clone;
   }
 
+  // Skip what the page itself doesn't render (responsive duplicates, closed
+  // menus, templates). Tab panels and accordions stay: they hold real content.
+  function isDisplayNone(el) {
+    if (el.tagName === 'NOSCRIPT' || el.getAttribute('role') === 'tabpanel') return false;
+    // Collapsed accordion / disclosure content is real content too.
+    if (el.id && document.querySelector('[aria-controls="' + cssEscape(el.id) + '"]')) return false;
+    try { return getComputedStyle(el).display === 'none'; } catch (_) { return false; }
+  }
+
   // Swap live same-origin iframes for a wrapper holding their (shadow-
   // pierced) content; cross-origin iframes become links. Returns the list
   // of swaps so the caller can restore the live page untouched.
@@ -1369,6 +1435,12 @@
     const swaps = [];
     try {
       root.querySelectorAll('iframe').forEach(iframe => {
+        // Invisible frames are trackers / session beacons, not content.
+        if (iframe.offsetWidth < 20 || iframe.offsetHeight < 20) {
+          iframe.setAttribute('data-fm-skip', '');
+          swaps.push({ iframe, skip: true });
+          return;
+        }
         let replacement = null;
         try {
           const doc = iframe.contentDocument;
@@ -1395,7 +1467,7 @@
         }
         if (replacement) swaps.push({ iframe, replacement });
       });
-      swaps.forEach(({ iframe, replacement }) => { try { iframe.replaceWith(replacement); } catch (_) {} });
+      swaps.forEach(({ iframe, replacement }) => { if (replacement) try { iframe.replaceWith(replacement); } catch (_) {} });
     } catch (e) {
       log('flattenIframesInRoot error (non-fatal):', e);
     }
@@ -1405,7 +1477,8 @@
   function restoreIframes(swaps) {
     if (!swaps) return;
     for (let i = swaps.length - 1; i >= 0; i--) {
-      const { iframe, replacement } = swaps[i];
+      const { iframe, replacement, skip } = swaps[i];
+      if (skip) { iframe.removeAttribute('data-fm-skip'); continue; }
       try { replacement.replaceWith(iframe); } catch (_) {}
     }
   }
@@ -1693,6 +1766,48 @@
     // we don't double-process here).
   }
 
+  // Turndown's GFM plugin only converts tables whose first row is all <th>;
+  // anything else is emitted as raw HTML. Unwrap layout tables into plain
+  // blocks and promote the first row of header-less data tables.
+  // Document order = outer tables first, so an unwrapped layout table's
+  // inner tables are still judged on their own.
+  function normalizeTables(root) {
+    Array.from(root.querySelectorAll('table')).forEach(table => {
+      try {
+        const rows = Array.from(table.rows);
+        const cells = rows.flatMap(r => Array.from(r.cells));
+        const isLayout = /^(presentation|none)$/.test(table.getAttribute('role') || '') ||
+          rows.length === 0 ||
+          rows.every(r => r.cells.length <= 1) ||
+          table.querySelector('table, h1, h2, h3, h4, h5, h6, pre, blockquote') ||
+          cells.some(c => (c.textContent || '').length > 600);
+        if (isLayout) {
+          const wrap = document.createElement('div');
+          cells.forEach(c => {
+            const div = document.createElement('div');
+            while (c.firstChild) div.appendChild(c.firstChild);
+            wrap.appendChild(div);
+          });
+          table.replaceWith(wrap);
+          return;
+        }
+        const first = rows[0];
+        if (Array.from(first.cells).every(c => c.nodeName === 'TH')) return;
+        const thead = document.createElement('thead');
+        const tr = document.createElement('tr');
+        Array.from(first.cells).forEach(c => {
+          const th = document.createElement('th');
+          while (c.firstChild) th.appendChild(c.firstChild);
+          tr.appendChild(th);
+        });
+        thead.appendChild(tr);
+        first.remove();
+        table.querySelector('thead')?.remove();
+        table.insertBefore(thead, table.firstChild);
+      } catch (e) { log('table normalize error (non-fatal):', e); }
+    });
+  }
+
   // ──────────────────────────────────────────────
   //  TURNDOWN CONVERSION (site-type-tuned, extended rules)
   // ──────────────────────────────────────────────
@@ -1707,7 +1822,6 @@
       strongDelimiter: '**',
       linkStyle: 'inlined',
       br: '  ',
-      preserveNestedTables: true,
     });
 
     // GFM plugin — strikethrough, task lists, tables, autolinks.
@@ -1733,6 +1847,7 @@
       replacement: (content, node) => {
         const src = node.getAttribute('src') || '';
         if (!src || src.startsWith('blob:') || src.startsWith('data:')) return '';
+        if (/doubleclick|googlesyndication|adservice|amazon-adsystem|adnxs/.test(src)) return '';
         const label = node.getAttribute('title') || 'Embedded content';
         return '\n\n[' + label + '](' + src + ')\n\n';
       }
@@ -1762,15 +1877,37 @@
       }
     });
 
+    // Highlighters (Shiki, Prism, CodeMirror) often render one element per
+    // line with no '\n' between them; textContent alone glues lines together.
+    const codeText = (el) => {
+      const c = el.cloneNode(true);
+      c.querySelectorAll('br').forEach(b => b.replaceWith('\n'));
+      const text = c.textContent || '';
+      const lines = c.querySelectorAll('.line, .code-line, .token-line, .cm-line');
+      if (lines.length > 1 && (text.match(/\n/g) || []).length < lines.length - 1) {
+        return Array.from(lines).map(l => l.textContent).join('\n');
+      }
+      return text;
+    };
+    const codeLang = (...els) => {
+      for (const el of els) {
+        if (!el) continue;
+        const attr = el.getAttribute('data-language') || el.getAttribute('data-lang') || '';
+        const cls = (el.getAttribute('class') || '').match(/(?:language|lang|highlight)-([\w+#-]+)/)?.[1] || '';
+        const lang = (attr || cls).toLowerCase().replace(/^(lang|source)-/, '');
+        if (lang && !/^(unknown|none|plain|plaintext|text|txt)$/.test(lang)) return lang;
+      }
+      return '';
+    };
+
     // <pre><code> → fenced code block with language hint
     td.addRule('preCodeBlock', {
       filter: (node) => node.nodeName === 'PRE' && node.firstChild?.nodeName === 'CODE',
       replacement: (content, node) => {
         try {
           const codeEl = node.firstChild;
-          const cls = codeEl.getAttribute('class') || '';
-          const lang = cls.match(/(?:language|lang|highlight)-(\w+)/)?.[1] || '';
-          const code = (codeEl.textContent || codeEl.innerText || '').replace(/\n$/, '');
+          const lang = codeLang(codeEl, node, node.parentElement);
+          const code = codeText(codeEl).replace(/\n$/, '');
           if (opts.codeBlocks === false) {
             const oneLine = code.replace(/\n/g, ' ').trim();
             if (oneLine.length <= 80) return '`' + oneLine + '`';
@@ -1786,8 +1923,8 @@
       filter: (node) => node.nodeName === 'PRE' && (!node.firstChild || node.firstChild.nodeName !== 'CODE'),
       replacement: (content, node) => {
         try {
-          const code = (node.textContent || '').replace(/\n$/, '');
-          return '\n\n```\n' + code + '\n```\n\n';
+          const code = codeText(node).replace(/\n$/, '');
+          return '\n\n```' + codeLang(node.querySelector('code'), node, node.parentElement) + '\n' + code + '\n```\n\n';
         } catch (_) { return content; }
       }
     });
@@ -1870,6 +2007,8 @@
         let src = node.getAttribute('src') || '';
         const title = node.getAttribute('title');
         if (!src || src.startsWith('data:image/svg')) return '';
+        // Spacer / tracking pixels.
+        if (parseInt(node.getAttribute('width'), 10) <= 2 || parseInt(node.getAttribute('height'), 10) <= 2) return '';
         // Resolve relative URLs.
         if (src && !src.startsWith('http') && !src.startsWith('data:')) {
           try { src = new URL(src, location.href).href; } catch (_) {}
@@ -1901,8 +2040,8 @@
           trackParams.forEach(p => { if (u.searchParams.has(p)) { u.searchParams.delete(p); changed = true; } });
           if (changed) href = u.toString();
         } catch (_) {}
-        // Auto-link bare URLs (no text content).
-        if (!txt) return '<' + href + '>';
+        // Icon-only links (heading permalinks, share buttons) carry no text.
+        if (!txt) return '';
         if (txt === href) return '<' + href + '>';
         return `[${txt}](${href})`;
       }
@@ -1919,7 +2058,7 @@
           const txt = (content || '').trim();
           if (!txt) return '';
           // Sanitize text: collapse internal whitespace, strip trailing spaces.
-          const cleanText = txt.replace(/\s+/g, ' ');
+          const cleanText = txt.replace(/\s+/g, ' ').replace(/^\[([^\]]+)\]\(#[^)]*\)$/, '$1');
           return '\n\n' + '#'.repeat(level) + ' ' + cleanText + '\n\n';
         }
       });
@@ -1931,8 +2070,15 @@
       replacement: () => ''
     });
 
-    // Keep table structure for GFM tables.
-    td.keep(['table', 'thead', 'tbody', 'tr', 'th', 'td']);
+    // GFM rows are single lines: flatten multi-line cell content.
+    td.addRule('tableCellFlat', {
+      filter: ['th', 'td'],
+      replacement: (content, node) => {
+        const txt = (content || '').trim().replace(/\s*\n+\s*/g, ' ').replace(/\|/g, '\\|');
+        const first = node.parentNode && node.parentNode.firstElementChild === node;
+        return (first ? '| ' : ' ') + txt + ' |';
+      }
+    });
 
     // GitHub-specific: preserve .markdown-body content verbatim.
     if (siteType === 'github' || siteType === 'github-issue' || siteType === 'github-wiki') {
@@ -2110,11 +2256,14 @@
 
     function flushBuffer() {
       if (buffer.length > 0) {
-        const txt = buffer.join('\n');
+        const txt = buffer.join('');
         if (txt) segments.push({ kind: 'text', text: txt });
         buffer = [];
       }
     }
+
+    // Each line keeps its own '\n' so segments re-join losslessly with ''.
+    const withNl = (k) => lines[k] + (k < lines.length - 1 ? '\n' : '');
 
     while (i < lines.length) {
       const line = lines[i];
@@ -2124,12 +2273,12 @@
         flushBuffer();
         const fence = fenceMatch[2][0]; // ` or ~
         const fenceLen = fenceMatch[2].length;
-        const codeLines = [line];
+        const codeLines = [withNl(i)];
         i++;
         // Scan until matching closing fence (same char, at least same length).
         while (i < lines.length) {
           const l = lines[i];
-          codeLines.push(l);
+          codeLines.push(withNl(i));
           const closeMatch = l.match(/^(\s*)(`{3,}|~{3,})\s*$/);
           if (closeMatch && closeMatch[2][0] === fence && closeMatch[2].length >= fenceLen) {
             i++;
@@ -2137,9 +2286,9 @@
           }
           i++;
         }
-        segments.push({ kind: 'code', text: codeLines.join('\n') });
+        segments.push({ kind: 'code', text: codeLines.join('') });
       } else {
-        buffer.push(line);
+        buffer.push(withNl(i));
         i++;
       }
     }
@@ -2172,14 +2321,17 @@
     // Only fix the common cases: "word ." → "word.", "word ," → "word,"
     // Leave ellipsis "..." alone.
     t = t.replace(/ +([.,;:!?])(?!\.)/g, '$1');
-    // Remove trailing whitespace on each line.
-    t = t.replace(/[ \t]+$/gm, '');
+    // Turndown pads bullets ("-   item"); normalize to one space.
+    t = t.replace(/^([ \t]*)([-*+]|\d+\.) {2,}/gm, '$1$2 ');
+    // Remove trailing whitespace on each line. Only before '\n': a segment
+    // can end mid-line right before an inline code span.
+    t = t.replace(/[ \t]+(?=\n)/g, '');
     // Remove empty link syntax `[](url)`.
-    t = t.replace(/\[\]\([^)]*\)/g, '');
+    t = t.replace(/(^|[^!])\[\]\([^)]*\)/gm, '$1');
     // Ensure headings are preceded by a blank line.
     t = t.replace(/([^\n])\n(#{1,6}\s)/g, '$1\n\n$2');
     // Ensure headings are followed by a blank line.
-    t = t.replace(/(#{1,6}\s[^\n]+)\n([^\n#])/g, '$1\n\n$2');
+    t = t.replace(/^(#{1,6}\s[^\n]+)\n(?=[^\n#])/gm, '$1\n\n');
     // Collapse multiple spaces inside lines (preserve indentation at line start).
     t = t.replace(/([^ \t\n]) {2,}([^ \t\n])/g, '$1 $2');
     // Fix stray HTML entities.
@@ -2246,7 +2398,10 @@
     const levelMap = {}; // original level → normalized level
     let nextNormalized = 0;
 
+    let inFence = false;
     for (let i = 0; i < lines.length; i++) {
+      if (/^\s*(`{3,}|~{3,})/.test(lines[i])) { inFence = !inFence; continue; }
+      if (inFence) continue;
       const m = lines[i].match(headingRe);
       if (!m) continue;
       const originalLevel = m[1].length;
