@@ -1,21 +1,17 @@
 /**
- * Background service worker — Fetch Markdown v3.0
+ * Background service worker — Fetch Markdown
  * Markdown-only context menus + keyboard shortcuts
  */
 
 chrome.runtime.onInstalled.addListener(() => {
-  // Page actions
-  chrome.contextMenus.create({ id: 'page-convert', title: '📄 Convert page to Markdown', contexts: ['page'] });
-  chrome.contextMenus.create({ id: 'page-convert-copy', title: '📋 Convert page & copy to clipboard', contexts: ['page'] });
-
-  // Selection
-  chrome.contextMenus.create({ id: 'selection-convert', title: '📝 Convert selection to Markdown', contexts: ['selection'] });
-
-  // Link
-  chrome.contextMenus.create({ id: 'link-md', title: '🔗 Copy link as Markdown', contexts: ['link'] });
-
-  // Image
-  chrome.contextMenus.create({ id: 'image-md', title: '🖼️ Copy image as Markdown', contexts: ['image'] });
+  // removeAll first: onInstalled also fires on update, and older versions
+  // registered menu ids that no longer exist.
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({ id: 'page-convert', title: 'Copy page as Markdown', contexts: ['page'] });
+    chrome.contextMenus.create({ id: 'selection-convert', title: 'Copy selection as Markdown', contexts: ['selection'] });
+    chrome.contextMenus.create({ id: 'link-md', title: 'Copy link as Markdown', contexts: ['link'] });
+    chrome.contextMenus.create({ id: 'image-md', title: 'Copy image as Markdown', contexts: ['image'] });
+  });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
@@ -50,12 +46,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
 
   // --- Page → Markdown ---
-  if (id === 'page-convert' || id === 'page-convert-copy') {
+  if (id === 'page-convert') {
     try {
-      const resp = await chrome.tabs.sendMessage(tab.id, {
-        type: 'CONVERT',
-        options: { includeTitle: true, includeMetadata: true, keepLinks: true, keepImages: true, codeBlocks: true, smartExtract: true }
-      });
+      const resp = await chrome.tabs.sendMessage(tab.id, { type: 'CONVERT' });
       if (resp?.result) {
         await copyAndFlash(resp.result, tab);
       } else if (resp?.error) {
@@ -73,10 +66,7 @@ chrome.commands.onCommand.addListener(async (command, tab) => {
 
   if (command === 'convert-page') {
     try {
-      const resp = await chrome.tabs.sendMessage(tab.id, {
-        type: 'CONVERT',
-        options: { includeTitle: true, includeMetadata: true, keepLinks: true, keepImages: true, codeBlocks: true, smartExtract: true }
-      });
+      const resp = await chrome.tabs.sendMessage(tab.id, { type: 'CONVERT' });
       if (resp?.result) await copyAndFlash(resp.result, tab);
       else if (resp?.error) flashBadge('✗', '#dc2626', tab.id);
     } catch (e) { flashBadge('✗', '#dc2626', tab.id); }
@@ -99,7 +89,7 @@ async function ensureContentScript(tab) {
   try {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      files: ['turndown.js', 'turndown-plugin-gfm.js', 'content.js']
+      files: ['settings.js', 'turndown.js', 'turndown-plugin-gfm.js', 'content.js']
     });
   } catch {}
 }

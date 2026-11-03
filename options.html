@@ -42,37 +42,10 @@
     <h2>YAML Front Matter Template</h2>
     <p>Placeholders: {title}, {url}, {date}, {author}, {description}, {site_type}</p>
     <div class="form-group">
-      <textarea id="yamlTemplate" rows="7">---
-title: "{title}"
-source: "{url}"
-date: "{date}"
-site_type: "{site_type}"
-author: "{author}"
-description: "{description}"
----</textarea>
+      <textarea id="yamlTemplate" rows="7"></textarea>
     </div>
   </div>
 
-  <div class="card">
-    <h2>Detected Site Types</h2>
-    <p>The extension auto-detects the type of website and applies tailored extraction:</p>
-    <div class="site-types">
-      <div class="site-type-chip">GitHub</div>
-      <div class="site-type-chip">GitHub Issue/PR</div>
-      <div class="site-type-chip">GitHub Wiki</div>
-      <div class="site-type-chip">Stack Overflow</div>
-      <div class="site-type-chip">Reddit</div>
-      <div class="site-type-chip">Twitter / X</div>
-      <div class="site-type-chip">Wikipedia</div>
-      <div class="site-type-chip">Blog</div>
-      <div class="site-type-chip">News</div>
-      <div class="site-type-chip">Documentation</div>
-      <div class="site-type-chip">Product Page</div>
-      <div class="site-type-chip">Academic Paper</div>
-      <div class="site-type-chip">Forum</div>
-      <div class="site-type-chip">Generic</div>
-    </div>
-  </div>
 
   <div class="card">
     <h2>Keyboard Shortcuts</h2>
@@ -90,6 +63,7 @@ description: "{description}"
     <span class="saved" id="savedMsg">Saved!</span>
   </div>
 
+  <script src="settings.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

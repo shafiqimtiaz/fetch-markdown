@@ -253,34 +253,6 @@ kbd {
   text-transform: uppercase;
 }
 
-.site-types {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.site-type-chip {
-  padding: 8px 14px;
-  background: var(--bg);
-  border: 2.5px solid var(--border);
-  border-radius: var(--radius);
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text);
-  text-align: center;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  transition: background 0.1s, border-color 0.1s;
-}
-
-.site-type-chip:hover {
-  background: var(--primary);
-  color: #fff;
-  border-color: var(--primary);
-}
-
 code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;

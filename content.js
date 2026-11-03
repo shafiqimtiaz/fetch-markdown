@@ -52,34 +52,29 @@
     if (msg.type === 'PING') { sendResponse({ pong: true, version: VERSION }); return; }
 
     if (msg.type === 'DETECT') {
+      const sel = window.getSelection();
+      const hasSelection = !!(sel && !sel.isCollapsed && sel.toString().trim());
       try {
         const det = detectSiteType();
-        sendResponse({ siteType: det.type, confidence: det.confidence, scores: det.scores });
+        sendResponse({ siteType: det.type, confidence: det.confidence, hasSelection });
       } catch (e) {
-        sendResponse({ siteType: 'generic', confidence: 0, error: e.message });
+        sendResponse({ siteType: 'generic', confidence: 0, hasSelection, error: e.message });
       }
       return;
     }
 
-    if (msg.type === 'CONVERT') {
-      try {
-        const result = convertPage(msg.options || {});
-        sendResponse({ result });
-      } catch (e) {
-        log('CONVERT error:', e);
-        sendResponse({ error: e.message, stack: e.stack });
-      }
-      return true;
-    }
-
-    if (msg.type === 'CONVERT_SELECTION') {
-      try {
-        const result = convertSelection(msg.options || {});
-        sendResponse({ result });
-      } catch (e) {
-        log('CONVERT_SELECTION error:', e);
-        sendResponse({ error: e.message });
-      }
+    if (msg.type === 'CONVERT' || msg.type === 'CONVERT_SELECTION') {
+      // Stored settings apply to every entry point; msg.options overrides.
+      fmLoadSettings().catch(() => FM_DEFAULTS).then((settings) => {
+        const opts = { ...settings, ...(msg.options || {}) };
+        try {
+          const result = msg.type === 'CONVERT' ? convertPage(opts) : convertSelection(opts);
+          sendResponse({ result });
+        } catch (e) {
+          log(msg.type + ' error:', e);
+          sendResponse({ error: e.message });
+        }
+      });
       return true;
     }
 
@@ -2134,16 +2129,13 @@
     div.appendChild(fragment);
 
     // Run the same DOM cleaning + lazy-load unwrapping as full-page mode.
-    cleanDOM(div, 'generic', opts, []);
+    const userExclude = (opts.extraExclude || '').split('\n').map(s => s.trim()).filter(Boolean);
+    cleanDOM(div, 'generic', opts, userExclude);
     unwrapLazyImages(div);
+    normalizeTables(div);
 
-    const fullOpts = {
-      keepLinks: opts.keepLinks !== false,
-      keepImages: opts.keepImages !== false,
-      codeBlocks: opts.codeBlocks !== false,
-    };
-    const md = toMarkdown(div, 'generic', fullOpts);
-    return postProcess(md, 'generic', fullOpts);
+    const md = toMarkdown(div, 'generic', opts);
+    return postProcess(md, 'generic', opts);
   }
 
   // ──────────────────────────────────────────────

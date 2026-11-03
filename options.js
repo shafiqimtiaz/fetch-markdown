@@ -1,10 +1,3 @@
-const DEFAULTS = {
-  includeTitle: true, includeMetadata: true, keepLinks: true,
-  keepImages: true, codeBlocks: true, smartExtract: true,
-  extraInclude: '', extraExclude: '',
-  yamlTemplate: '---\ntitle: "{title}"\nsource: "{url}"\ndate: "{date}"\nsite_type: "{site_type}"\nauthor: "{author}"\ndescription: "{description}"\n---'
-};
-
 document.addEventListener('DOMContentLoaded', () => {
   loadSettings();
   document.getElementById('saveBtn').addEventListener('click', saveSettings);
@@ -16,8 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function loadSettings() {
-  chrome.storage.local.get(['settings'], r => {
-    const s = { ...DEFAULTS, ...r.settings };
+  fmLoadSettings().then(s => {
     document.getElementById('defTitle').checked = s.includeTitle;
     document.getElementById('defMetadata').checked = s.includeMetadata;
     document.getElementById('defLinks').checked = s.keepLinks;
@@ -26,7 +18,7 @@ function loadSettings() {
     document.getElementById('defSmartExtract').checked = s.smartExtract;
     document.getElementById('extraInclude').value = s.extraInclude || '';
     document.getElementById('extraExclude').value = s.extraExclude || '';
-    document.getElementById('yamlTemplate').value = s.yamlTemplate || DEFAULTS.yamlTemplate;
+    document.getElementById('yamlTemplate').value = s.yamlTemplate || FM_DEFAULTS.yamlTemplate;
   });
 }
 
@@ -50,7 +42,7 @@ function saveSettings() {
 }
 
 function resetSettings() {
-  chrome.storage.local.set({ settings: DEFAULTS }, () => {
+  chrome.storage.local.set({ settings: FM_DEFAULTS }, () => {
     loadSettings();
     const msg = document.getElementById('savedMsg');
     msg.textContent = 'Reset!';

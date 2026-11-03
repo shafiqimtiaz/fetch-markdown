@@ -1,296 +1,237 @@
-/* Fetch Markdown v3.0 — Popup Script */
-let currentMarkdown = '';
-let detectedSiteType = '';
+/* Fetch Markdown — Popup */
+const $ = (id) => document.getElementById(id);
+const CONTENT_FILES = ['settings.js', 'turndown.js', 'turndown-plugin-gfm.js', 'content.js'];
+const SITE_LABELS = {
+  'github': 'GitHub', 'github-issue': 'GitHub Issue', 'github-wiki': 'GitHub Wiki', 'gitlab': 'GitLab',
+  'bitbucket': 'Bitbucket', 'stackoverflow': 'Stack Overflow', 'reddit': 'Reddit', 'twitter': 'X / Twitter',
+  'linkedin': 'LinkedIn', 'youtube': 'YouTube', 'wiki': 'Wiki', 'notion': 'Notion', 'confluence': 'Confluence',
+  'discourse': 'Discourse', 'hackernews': 'Hacker News', 'blog': 'Blog', 'news': 'News', 'docs': 'Docs',
+  'product': 'Product', 'academic': 'Paper', 'forum': 'Forum', 'webmail': 'Webmail', 'chatgpt': 'AI chat',
+  'generic': 'Web page',
+};
+
+// Raw HTML in page-derived Markdown must never render in the extension page.
+marked.use({ renderer: { html: (html) => escHtml(typeof html === 'string' ? html : html.text || '') } });
+
+let tab = null;
+let mode = 'page';
+let markdown = '';
+let title = '';
 
 document.addEventListener('DOMContentLoaded', async () => {
-  loadTheme();
-  loadHistory();
-  setupTabs();
-  setupConvertButtons();
-  setupOutputActions();
-  setupThemeToggle();
-  setupSettingsBtn();
-  setupHistoryActions();
+  $('version').textContent = 'v' + chrome.runtime.getManifest().version;
+  chrome.storage.local.get('theme', (r) => { if (r.theme === 'dark') document.body.dataset.theme = 'dark'; });
+  setupControls();
+  await renderOptions();
 
+  [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  title = tab?.title || 'Untitled';
+  $('pageTitle').textContent = title;
+  try { $('pageHost').textContent = new URL(tab.url).hostname; } catch (_) {}
+
+  if (!tab?.url?.startsWith('http')) {
+    return showMessage("This page can't be converted. Browser pages and the Chrome Web Store block extensions.");
+  }
   try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab) return;
-    document.getElementById('pageTitle').textContent = tab.title || 'Untitled';
-    document.getElementById('pageUrl').textContent = tab.url || '';
-
-    try { await chrome.tabs.sendMessage(tab.id, { type: 'PING' }); }
-    catch {
-      if (tab.url?.startsWith('http')) {
-        await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          files: ['turndown.js', 'turndown-plugin-gfm.js', 'content.js']
-        });
-      }
+    await ensureContentScript();
+    const det = await chrome.tabs.sendMessage(tab.id, { type: 'DETECT' });
+    if (det?.siteType) {
+      $('siteType').textContent = SITE_LABELS[det.siteType] || det.siteType;
+      $('siteType').hidden = false;
     }
-
-    try {
-      const resp = await chrome.tabs.sendMessage(tab.id, { type: 'DETECT' });
-      if (resp?.siteType) {
-        detectedSiteType = resp.siteType;
-        document.getElementById('siteTypeLabel').textContent = formatSiteType(resp.siteType);
-        document.querySelector('.site-type-dot').classList.add('detected');
-      }
-    } catch (_) {}
-  } catch (e) { console.error('Init:', e); }
+    if (det?.hasSelection) {
+      document.querySelector('[data-mode="selection"]').disabled = false;
+      setMode('selection');
+    }
+  } catch (_) {
+    return showMessage('Could not read this page. Reload it and try again.');
+  }
+  convert();
 });
 
-function formatSiteType(t) {
-  const map = {
-    'github': 'GitHub', 'github-issue': 'GitHub Issue', 'github-wiki': 'GitHub Wiki',
-    'stackoverflow': 'Stack Overflow', 'webmail': 'Webmail', 'reddit': 'Reddit', 'twitter': 'Twitter / X',
-    'wiki': 'Wikipedia', 'blog': 'Blog', 'news': 'News', 'docs': 'Documentation',
-    'product': 'Product Page', 'academic': 'Academic Paper', 'forum': 'Forum',
-    'generic': 'Generic Page'
-  };
-  return map[t] || t;
+async function ensureContentScript() {
+  try { await chrome.tabs.sendMessage(tab.id, { type: 'PING' }); }
+  catch { await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: CONTENT_FILES }); }
 }
 
-/* ---- Tabs ---- */
-function setupTabs() {
-  document.querySelectorAll('.tab').forEach(tab => {
-    tab.addEventListener('click', () => {
-      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
-    });
-  });
-}
-
-/* ---- Options ---- */
-// Loads user-defined settings (custom selectors, YAML template) from
-// chrome.storage.local and merges them with the per-conversion checkbox
-// options. Returns a Promise because chrome.storage is async.
-function getOptions() {
-  const checkboxOpts = {
-    includeTitle: document.getElementById('optTitle').checked,
-    includeMetadata: document.getElementById('optMetadata').checked,
-    keepLinks: document.getElementById('optLinks').checked,
-    keepImages: document.getElementById('optImages').checked,
-    codeBlocks: document.getElementById('optCodeBlocks').checked,
-    smartExtract: document.getElementById('optSmartExtract').checked,
-  };
-  return new Promise((resolve) => {
-    chrome.storage.local.get(['settings'], (r) => {
-      const s = r.settings || {};
-      resolve({
-        ...checkboxOpts,
-        extraInclude: s.extraInclude || '',
-        extraExclude: s.extraExclude || '',
-        yamlTemplate: s.yamlTemplate || '',
-      });
-    });
-  });
-}
-
-/* ---- Convert ---- */
-function setupConvertButtons() {
-  document.getElementById('convertBtn').addEventListener('click', () => doConvert('page'));
-  document.getElementById('convertSelBtn').addEventListener('click', () => doConvert('selection'));
-}
-
-async function doConvert(mode) {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.url?.startsWith('http')) { showStatus('Cannot convert this page.', 'error'); return; }
-
-  const isPage = mode === 'page';
-  const btn = isPage ? document.getElementById('convertBtn') : document.getElementById('convertSelBtn');
-  const opts = isPage ? await getOptions() : { keepLinks: true, keepImages: true, codeBlocks: true };
-
-  btn.disabled = true;
-  btn.innerHTML = '<div class="spinner"></div> Converting...';
-  hideStatus();
-
-  const outputEl = isPage ? document.getElementById('outputSection') : document.getElementById('selectionOutput');
-  outputEl.hidden = true;
-
+async function convert() {
+  showMessage(mode === 'page' ? 'Converting…' : 'Converting selection…', true);
   try {
-    const msg = isPage
-      ? { type: 'CONVERT', options: opts }
-      : { type: 'CONVERT_SELECTION' };
-
-    const resp = await chrome.tabs.sendMessage(tab.id, msg);
-    if (resp?.result) {
-      const md = resp.result;
-      if (isPage) {
-        currentMarkdown = md;
-        document.getElementById('editor').value = md;
-        updateStats(md);
-      } else {
-        document.getElementById('selEditor').value = md;
-        document.getElementById('selStat').textContent = md.length.toLocaleString() + ' chars';
-        document.getElementById('selectionHint').classList.add('hidden');
-      }
-      outputEl.hidden = false;
-
-      // Collapse options to free space for output
-      if (isPage) {
-        const details = document.getElementById('optionsDetails');
-        if (details && details.open) details.open = false;
-      }
-
-      showStatus('Converted' + (detectedSiteType ? ' (' + formatSiteType(detectedSiteType) + ')' : ''), 'success');
-      if (isPage) saveToHistory(tab.title, tab.url, md);
-    } else {
-      showStatus(resp?.error || (isPage ? 'No content extracted.' : 'No text selected.'), 'error');
+    const resp = await chrome.tabs.sendMessage(tab.id, { type: mode === 'page' ? 'CONVERT' : 'CONVERT_SELECTION' });
+    if (!resp?.result) {
+      return showMessage(resp?.error === 'No text selected'
+        ? 'The selection is gone. Select text again, or convert the page.'
+        : 'Nothing could be extracted from this page.');
     }
-  } catch (e) {
-    showStatus('Failed. Try refreshing the page.', 'error');
-  } finally {
-    btn.disabled = false;
-    const label = isPage ? 'Convert to Markdown' : 'Convert Selection';
-    const sz = isPage ? 16 : 14;
-    btn.innerHTML = '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> ' + label;
+    setMarkdown(resp.result);
+    $('overlay').hidden = true;
+    if (mode === 'page') saveToHistory(tab.title, tab.url, resp.result);
+  } catch (_) {
+    showMessage('Conversion failed. Reload the page and try again.');
   }
 }
 
-/* ---- Stats ---- */
-function updateStats(text) {
-  document.getElementById('statChars').textContent = text.length.toLocaleString() + ' chars';
-  document.getElementById('statWords').textContent = text.split(/\s+/).filter(Boolean).length.toLocaleString() + ' words';
-  document.getElementById('statLines').textContent = text.split('\n').length.toLocaleString() + ' lines';
-  document.getElementById('statHeadings').textContent = (text.match(/^#{1,6}\s/gm) || []).length + ' h';
+function setMarkdown(md) {
+  markdown = md;
+  $('editor').value = md;
+  if (!$('preview').hidden) $('preview').innerHTML = marked.parse(md);
+  updateStats();
+  $('copyBtn').disabled = $('downloadBtn').disabled = !md.trim();
 }
 
-/* ---- Output actions ---- */
-function setupOutputActions() {
-  document.getElementById('copyBtn').addEventListener('click', () => copyText(currentMarkdown, 'copyBtn'));
-  document.getElementById('downloadBtn').addEventListener('click', () => downloadMd(currentMarkdown));
-  document.getElementById('previewBtn').addEventListener('click', () => togglePreview());
-  document.getElementById('selCopyBtn').addEventListener('click', () => copyText(
-    document.getElementById('selEditor').value, 'selCopyBtn'
-  ));
-  document.getElementById('editor').addEventListener('input', e => {
-    currentMarkdown = e.target.value;
-    updateStats(currentMarkdown);
+function showMessage(text, busy = false) {
+  $('overlayText').textContent = text;
+  $('overlay').classList.toggle('busy', busy);
+  $('overlay').hidden = false;
+}
+
+function updateStats() {
+  const words = markdown.split(/\s+/).filter(Boolean).length;
+  const tokens = Math.round(markdown.length / 4);
+  $('stats').textContent = words.toLocaleString() + ' words · ' +
+    markdown.length.toLocaleString() + ' chars · ~' + tokens.toLocaleString() + ' tokens';
+}
+
+function setMode(next) {
+  mode = next;
+  document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('active', b.dataset.mode === next));
+}
+
+function setView(next) {
+  const preview = next === 'preview';
+  document.querySelectorAll('[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === next));
+  if (preview) $('preview').innerHTML = marked.parse(markdown);
+  $('preview').hidden = !preview;
+  $('editor').hidden = preview;
+}
+
+async function renderOptions() {
+  const s = await fmLoadSettings();
+  document.querySelectorAll('[data-opt]').forEach(cb => { cb.checked = !!s[cb.dataset.opt]; });
+}
+
+function setupControls() {
+  document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.mode === mode) return;
+    setMode(b.dataset.mode);
+    convert();
+  }));
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+  document.querySelectorAll('[data-opt]').forEach(cb => cb.addEventListener('change', async () => {
+    await fmSaveSettings({ [cb.dataset.opt]: cb.checked });
+    if (tab?.url?.startsWith('http')) convert();
+  }));
+  // Links in the preview open in a tab; navigating the popup would lose the output.
+  $('preview').addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    e.preventDefault();
+    if (/^https?:/.test(a.href)) chrome.tabs.create({ url: a.href });
   });
-}
-
-async function copyText(text, btnId) {
-  try {
-    await navigator.clipboard.writeText(text);
-    const btn = document.getElementById(btnId);
-    const orig = btn.innerHTML;
-    btn.classList.add('copied');
-    btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg> Done';
-    setTimeout(() => { btn.classList.remove('copied'); btn.innerHTML = orig; }, 1500);
-  } catch { showStatus('Copy failed.', 'error'); }
-}
-
-function downloadMd(text) {
-  chrome.tabs.query({ active: true, currentWindow: true }, tabs => {
-    const name = (tabs[0]?.title || 'page').replace(/[^a-zA-Z0-9\s\-_.]/g, '').replace(/\s+/g, '-').substring(0, 80).toLowerCase();
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
-    a.download = name + '.md';
-    a.click();
-  });
-}
-
-function togglePreview() {
-  const editor = document.getElementById('editor');
-  const preview = document.getElementById('preview');
-  const btn = document.getElementById('previewBtn');
-  const isPreviewing = !preview.hidden;
-
-  if (isPreviewing) {
-    preview.hidden = true;
-    editor.hidden = false;
-    btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg> Preview';
-    btn.classList.remove('active');
-  } else {
-    const md = editor.value || currentMarkdown;
-    if (!md.trim()) return;
-    preview.innerHTML = marked.parse(md);
-    editor.hidden = true;
-    preview.hidden = false;
-    btn.innerHTML = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg> Edit';
-    btn.classList.add('active');
-  }
-}
-
-/* ---- Theme ---- */
-function loadTheme() {
-  chrome.storage.local.get(['theme'], r => {
-    if (r.theme === 'dark') document.body.dataset.theme = 'dark';
-  });
-}
-
-function setupThemeToggle() {
-  document.getElementById('themeToggle').addEventListener('click', () => {
+  $('editor').addEventListener('input', (e) => { markdown = e.target.value; updateStats(); });
+  $('copyBtn').addEventListener('click', () => copyText(markdown, $('copyBtn')));
+  $('downloadBtn').addEventListener('click', () => download(title, markdown));
+  $('historyBtn').addEventListener('click', toggleHistory);
+  $('settingsBtn').addEventListener('click', () => chrome.runtime.openOptionsPage());
+  $('themeToggle').addEventListener('click', () => {
     const next = document.body.dataset.theme === 'dark' ? 'light' : 'dark';
     document.body.dataset.theme = next;
     chrome.storage.local.set({ theme: next });
   });
-}
-
-function setupSettingsBtn() {
-  document.getElementById('settingsBtn').addEventListener('click', () => chrome.runtime.openOptionsPage());
-}
-
-/* ---- History ---- */
-function saveToHistory(title, url, content) {
-  chrome.storage.local.get(['history'], r => {
-    const h = r.history || [];
-    h.unshift({ title: title || 'Untitled', url: url || '', length: content.length, content, time: Date.now() });
-    if (h.length > 50) h.length = 50;
-    chrome.storage.local.set({ history: h }, () => loadHistory());
+  $('historyList').addEventListener('click', onHistoryClick);
+  $('clearHistoryBtn').addEventListener('click', async () => {
+    await chrome.storage.local.set({ history: [] });
+    renderHistory();
   });
 }
 
-function loadHistory() {
-  chrome.storage.local.get(['history'], r => {
-    const list = document.getElementById('historyList');
+async function copyText(text, btn) {
+  const label = btn.querySelector('span');
+  const orig = label.textContent;
+  try {
+    await navigator.clipboard.writeText(text);
+    btn.classList.add('copied');
+    label.textContent = 'Copied';
+  } catch (_) {
+    label.textContent = 'Copy failed';
+  }
+  setTimeout(() => { btn.classList.remove('copied'); label.textContent = orig; }, 1500);
+}
+
+function download(name0, text) {
+  const name = (name0 || 'page').replace(/[^a-zA-Z0-9\s\-_.]/g, '').trim().replace(/\s+/g, '-').substring(0, 80).toLowerCase() || 'page';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown;charset=utf-8' }));
+  a.download = name + '.md';
+  a.click();
+}
+
+/* ---- History ---- */
+function toggleHistory() {
+  const open = $('historyView').hidden;
+  $('historyView').hidden = !open;
+  $('mainView').hidden = open;
+  $('historyBtn').setAttribute('aria-pressed', String(open));
+  if (open) renderHistory();
+}
+
+function saveToHistory(title, url, content) {
+  chrome.storage.local.get('history', (r) => {
+    // Re-converting the same page replaces its entry instead of stacking copies.
+    const h = (r.history || []).filter(item => item.url !== url);
+    h.unshift({ title: title || 'Untitled', url: url || '', length: content.length, content, time: Date.now() });
+    chrome.storage.local.set({ history: h.slice(0, 30) });
+  });
+}
+
+function renderHistory() {
+  chrome.storage.local.get('history', (r) => {
     const h = r.history || [];
-    if (!h.length) { list.innerHTML = '<div class="history-empty">No conversions yet</div>'; return; }
-    list.innerHTML = h.map((item, i) => {
+    $('clearHistoryBtn').hidden = !h.length;
+    if (!h.length) {
+      $('historyList').innerHTML = '<div class="history-empty">No conversions yet</div>';
+      return;
+    }
+    $('historyList').innerHTML = h.map((item, i) => {
       const d = new Date(item.time);
-      const t = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-      const D = d.toLocaleDateString([], { month: 'short', day: 'numeric' });
-      return '<div class="history-item" data-idx="' + i + '"><div class="history-info"><div class="history-item-title">' + escHtml(item.title) + '</div><div class="history-item-meta">' + D + ' ' + t + ' &middot; ' + item.length.toLocaleString() + ' chars</div></div><div class="history-item-actions"><button class="btn-sm hist-copy" data-idx="' + i + '">Copy</button><button class="btn-sm hist-dl" data-idx="' + i + '">Save</button><button class="btn-sm btn-danger hist-del" data-idx="' + i + '">&times;</button></div></div>';
+      const when = d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' +
+        d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      let host = '';
+      try { host = new URL(item.url).hostname; } catch (_) {}
+      return '<div class="history-item">' +
+        '<button class="history-open" data-act="open" data-idx="' + i + '" title="Open">' +
+          '<span class="history-item-title">' + escHtml(item.title) + '</span>' +
+          '<span class="history-item-meta">' + escHtml(host) + ' · ' + when + ' · ' + item.length.toLocaleString() + ' chars</span>' +
+        '</button>' +
+        '<button class="btn-sm" data-act="copy" data-idx="' + i + '"><span>Copy</span></button>' +
+        '<button class="btn-sm btn-danger" data-act="delete" data-idx="' + i + '" aria-label="Delete">&times;</button>' +
+      '</div>';
     }).join('');
   });
 }
 
-function setupHistoryActions() {
-  document.getElementById('historyList').addEventListener('click', async e => {
-    const btn = e.target.closest('[data-idx]');
-    if (!btn) return;
-    const idx = parseInt(btn.dataset.idx);
-    const { history } = await chrome.storage.local.get(['history']);
-    const item = history?.[idx];
-    if (!item) return;
-    if (btn.classList.contains('hist-copy')) {
-      await navigator.clipboard.writeText(item.content);
-      btn.textContent = 'Done'; setTimeout(() => btn.textContent = 'Copy', 1200);
-    } else if (btn.classList.contains('hist-dl')) {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([item.content], { type: 'text/markdown;charset=utf-8' }));
-      a.download = item.title.replace(/[^a-zA-Z0-9\s\-_.]/g, '').replace(/\s+/g, '-').substring(0, 80).toLowerCase() + '.md';
-      a.click();
-    } else if (btn.classList.contains('hist-del')) {
-      history.splice(idx, 1);
-      await chrome.storage.local.set({ history });
-      loadHistory();
-    }
-  });
-  document.getElementById('clearHistoryBtn').addEventListener('click', async () => {
-    await chrome.storage.local.set({ history: [] });
-    loadHistory();
-  });
+async function onHistoryClick(e) {
+  const btn = e.target.closest('[data-act]');
+  if (!btn) return;
+  const { history = [] } = await chrome.storage.local.get('history');
+  const idx = +btn.dataset.idx;
+  const item = history[idx];
+  if (!item) return;
+  if (btn.dataset.act === 'copy') return copyText(item.content, btn);
+  if (btn.dataset.act === 'delete') {
+    history.splice(idx, 1);
+    await chrome.storage.local.set({ history });
+    return renderHistory();
+  }
+  toggleHistory();
+  title = item.title;
+  $('pageTitle').textContent = title;
+  try { $('pageHost').textContent = new URL(item.url).hostname; } catch (_) {}
+  $('siteType').hidden = true;
+  setMarkdown(item.content);
+  $('overlay').hidden = true;
 }
 
-/* ---- Utils ---- */
-function showStatus(msg, type) {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = 'status ' + type;
-  el.hidden = false;
+function escHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
-function hideStatus() { document.getElementById('status').hidden = true; }
-function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }

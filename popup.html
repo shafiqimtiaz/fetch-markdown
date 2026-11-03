@@ -6,145 +6,96 @@
   <title>Fetch Markdown</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Darker+Grotesque:wght@500;600;700;800;900&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="popup.css">
 </head>
 <body data-theme="light">
   <div class="app">
     <header class="topbar">
       <div class="logo">
-        <img src="icons/icon32.png" width="20" height="20" alt="Fetch Markdown">
+        <img src="icons/icon32.png" width="20" height="20" alt="">
         <span>Fetch Markdown</span>
-        <span class="version">v3</span>
+        <span class="version" id="version"></span>
       </div>
       <div class="topbar-actions">
-        <button class="icon-btn" id="settingsBtn" title="Settings">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        <button class="icon-btn" id="historyBtn" title="History" aria-label="History" aria-pressed="false">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         </button>
-        <button class="icon-btn" id="themeToggle" title="Toggle theme">
-          <svg class="icon-sun" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-          <svg class="icon-moon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Settings">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
+        <button class="icon-btn" id="themeToggle" title="Toggle theme" aria-label="Toggle theme">
+          <svg class="icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+          <svg class="icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         </button>
       </div>
     </header>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="convert">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        Convert
-      </button>
-      <button class="tab" data-tab="selection">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 2h6l3 7H6l3-7z"/><rect x="3" y="9" width="18" height="2"/><path d="M5 11v10a1 1 0 001 1h12a1 1 0 001-1V11"/></svg>
-        Selection
-      </button>
-      <button class="tab" data-tab="history">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-        History
-      </button>
-    </nav>
-
-    <!-- Convert tab -->
-    <section class="tab-panel active" id="tab-convert">
+    <!-- Main view -->
+    <main class="view" id="mainView">
       <div class="page-info">
-        <div class="page-title" id="pageTitle">Loading...</div>
-        <div class="page-url" id="pageUrl"></div>
-        <div class="site-type-badge" id="siteTypeBadge">
-          <span class="site-type-dot"></span>
-          <span id="siteTypeLabel">detecting...</span>
+        <div class="page-title" id="pageTitle">Loading…</div>
+        <div class="page-meta">
+          <span class="page-host" id="pageHost"></span>
+          <span class="chip" id="siteType" hidden></span>
         </div>
       </div>
 
-      <details class="options-collapsible" id="optionsDetails" open>
-        <summary class="options-toggle">Options</summary>
+      <div class="toolbar">
+        <div class="seg" role="group" aria-label="Source">
+          <button class="seg-btn active" data-mode="page">Page</button>
+          <button class="seg-btn" data-mode="selection" disabled title="Select text on the page first">Selection</button>
+        </div>
+        <div class="seg" role="group" aria-label="View">
+          <button class="seg-btn active" data-view="raw">Raw</button>
+          <button class="seg-btn" data-view="preview">Preview</button>
+        </div>
+      </div>
+
+      <div class="output">
+        <textarea class="editor" id="editor" spellcheck="false" aria-label="Markdown output"></textarea>
+        <div class="preview" id="preview" hidden></div>
+        <div class="overlay" id="overlay">
+          <div class="spinner"></div>
+          <span id="overlayText">Converting…</span>
+        </div>
+      </div>
+
+      <div class="stats" id="stats"></div>
+
+      <details class="options" id="options">
+        <summary>Options</summary>
         <div class="options-grid">
-          <label class="opt"><input type="checkbox" id="optTitle" checked> Title heading</label>
-          <label class="opt"><input type="checkbox" id="optMetadata" checked> YAML front matter</label>
-          <label class="opt"><input type="checkbox" id="optLinks" checked> Keep links</label>
-          <label class="opt"><input type="checkbox" id="optImages" checked> Keep images</label>
-          <label class="opt"><input type="checkbox" id="optCodeBlocks" checked> Fenced code</label>
-          <label class="opt"><input type="checkbox" id="optSmartExtract" checked> Smart extract</label>
+          <label class="opt"><input type="checkbox" data-opt="includeTitle"> Title heading</label>
+          <label class="opt"><input type="checkbox" data-opt="includeMetadata"> YAML front matter</label>
+          <label class="opt"><input type="checkbox" data-opt="keepLinks"> Links</label>
+          <label class="opt"><input type="checkbox" data-opt="keepImages"> Images</label>
+          <label class="opt" title="Off: convert the whole page, including menus and sidebars"><input type="checkbox" data-opt="smartExtract"> Main content only</label>
         </div>
       </details>
 
-      <button class="btn btn-primary" id="convertBtn">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        Convert to Markdown
-      </button>
-
-      <div class="status" id="status" hidden></div>
-
-      <div class="output-area" id="outputSection" hidden>
-        <div class="output-bar">
-          <div class="stats">
-            <span class="stat" id="statChars">0 chars</span>
-            <span class="stat" id="statWords">0 words</span>
-            <span class="stat" id="statLines">0 lines</span>
-            <span class="stat" id="statHeadings">0 h</span>
-          </div>
-          <div class="output-actions">
-            <button class="btn-sm" id="copyBtn">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              Copy
-            </button>
-            <button class="btn-sm" id="downloadBtn">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              .md
-            </button>
-            <button class="btn-sm" id="previewBtn">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              Preview
-            </button>
-          </div>
-        </div>
-        <div class="editor-wrap">
-          <textarea class="editor" id="editor" spellcheck="false" placeholder="Markdown output..."></textarea>
-          <div class="preview" id="preview" hidden></div>
-        </div>
+      <div class="actions">
+        <button class="btn btn-primary" id="copyBtn" disabled>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          <span>Copy Markdown</span>
+        </button>
+        <button class="btn btn-secondary" id="downloadBtn" disabled title="Download .md file">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>.md</span>
+        </button>
       </div>
-    </section>
+    </main>
 
-    <!-- Selection tab -->
-    <section class="tab-panel" id="tab-selection">
-      <div class="selection-hint" id="selectionHint">
-        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.3"><path d="M9 2h6l3 7H6l3-7z"/><rect x="3" y="9" width="18" height="2"/><path d="M5 11v10a1 1 0 001 1h12a1 1 0 001-1V11"/></svg>
-        <p>Select text on the page, then click <strong>Convert Selection</strong></p>
-        <p class="hint-sub">Or press <kbd>Ctrl+Shift+S</kbd></p>
-      </div>
-      <button class="btn btn-primary" id="convertSelBtn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
-        Convert Selection
-      </button>
-      <div class="output-area" id="selectionOutput" hidden>
-        <div class="output-bar">
-          <span class="stat" id="selStat">0 chars</span>
-          <div class="output-actions">
-            <button class="btn-sm" id="selCopyBtn">
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-              Copy
-            </button>
-          </div>
-        </div>
-        <textarea class="editor" id="selEditor" spellcheck="false"></textarea>
-      </div>
-    </section>
-
-    <!-- History tab -->
-    <section class="tab-panel" id="tab-history">
+    <!-- History view -->
+    <section class="view" id="historyView" hidden>
       <div class="history-header">
-        <span class="history-label">Recent Conversions</span>
-        <button class="btn-sm btn-danger" id="clearHistoryBtn">Clear All</button>
+        <span class="history-label">Recent conversions</span>
+        <button class="btn-sm btn-danger" id="clearHistoryBtn">Clear all</button>
       </div>
-      <div class="history-list" id="historyList">
-        <div class="history-empty">No conversions yet</div>
-      </div>
+      <div class="history-list" id="historyList"></div>
     </section>
-
-    <footer class="footer">
-      <span>Right-click any page to convert</span>
-      <span class="footer-dot"></span>
-      <span><kbd>Ctrl+Shift+M</kbd></span>
-    </footer>
   </div>
+  <script src="settings.js"></script>
   <script src="marked.min.js"></script>
   <script src="popup.js"></script>
 </body>
