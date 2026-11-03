@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Fetch Markdown",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "description": "Convert any web page to clean Markdown. Smart site detection, fallback extraction, and code-aware output for production use.",
   "permissions": [
     "activeTab",
@@ -53,5 +53,5 @@
       "description": "Convert selected text to Markdown"
     }
   },
-  "version_name": "4.2.0"
+  "version_name": "4.3.0"
 }

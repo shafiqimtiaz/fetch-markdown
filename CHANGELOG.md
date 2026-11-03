@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.3.0 (2026-11-03)
+
+### Features
+
+* **popup:** single-screen popup that converts on open (selection when text is selected), persisted option toggles, Copy as the primary action, word/char/token stats, history behind a header button ([cce2985](https://github.com/shafiqimtiaz/fetch-markdown/commit/cce2985))
+* **settings:** one shared settings object, so popup, keyboard shortcut and context menu convert identically and the options page defaults apply; YAML front matter is now off by default ([cce2985](https://github.com/shafiqimtiaz/fetch-markdown/commit/cce2985))
+
+### Bug Fixes
+
+* **convert:** code fences no longer glued to the preceding line; space before inline code kept; header-less and layout tables convert to Markdown instead of raw HTML; highlighter code keeps its line breaks; ad/hidden-element filters no longer delete real content; duplicate title removed; Hacker News, arXiv and GitHub issue extraction rebuilt ([83257a6](https://github.com/shafiqimtiaz/fetch-markdown/commit/83257a6))
+* **preview:** raw HTML is escaped and links open in a new tab ([cce2985](https://github.com/shafiqimtiaz/fetch-markdown/commit/cce2985))
+
 ## 4.2.0 (2026-08-07)
 
 ### Features
